@@ -11,9 +11,28 @@ dotenv.config();
 
 const { Pool } = pg;
 const PORT = 3000;
+
+// In local development, placing the JSON file inside node_modules prevents file watchers (like Vite or tsx)
+// from detecting modifications and triggering hot reloads or server restarts.
 const DB_FILE = process.env.VERCEL 
   ? path.join("/tmp", "db-rifa.json")
-  : path.join(process.cwd(), "db-rifa.json");
+  : (process.env.NODE_ENV === "production"
+      ? path.join(process.cwd(), "db-rifa.json")
+      : path.join(process.cwd(), "node_modules", "db-rifa.json"));
+
+// Migrate existing db-rifa.json from ROOT to node_modules in development so no data is lost
+if (!process.env.VERCEL && process.env.NODE_ENV !== "production") {
+  const oldRootPath = path.join(process.cwd(), "db-rifa.json");
+  const newDevPath = path.join(process.cwd(), "node_modules", "db-rifa.json");
+  if (fs.existsSync(oldRootPath) && !fs.existsSync(newDevPath)) {
+    try {
+      fs.copyFileSync(oldRootPath, newDevPath);
+      console.log("[Migration] Copiado banco local de db-rifa.json para node_modules para evitar reloads no desenvolvimento!");
+    } catch (migErr) {
+      console.error("[Migration] Erro ao copiar banco para node_modules:", migErr);
+    }
+  }
+}
 
 // 1. Direct Connection Pool (via DATABASE_URL string)
 let dbPool: pg.Pool | null = null;
@@ -807,7 +826,12 @@ initDatabase()
     async function configureStaticAndListen() {
       if (process.env.NODE_ENV !== "production") {
         const vite = await createViteServer({
-          server: { middlewareMode: true },
+          server: { 
+            middlewareMode: true,
+            watch: {
+              ignored: ["**/db-rifa.json", "**/db-rifa.json/**"]
+            }
+          },
           appType: "spa",
         });
         app.use(vite.middlewares);
