@@ -100,7 +100,12 @@ export default function App() {
         setTickets(dataPublic.tickets);
         setDrawnNumbers(dataPublic.drawnNumbers);
       } else {
-        setErrorHeader("Falha ao inicializar banco de rifas.");
+        try {
+          const errData = await resPublic.json();
+          setErrorHeader(`Falha ao inicializar banco de rifas: ${errData.error || resPublic.statusText}`);
+        } catch {
+          setErrorHeader(`Falha ao inicializar banco de rifas (Erro ${resPublic.status}).`);
+        }
       }
     } catch {
       setErrorHeader("Erro de comunicação ao conectar com a API.");

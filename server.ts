@@ -5,7 +5,7 @@ import pg from "pg";
 import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import { createServer as createViteServer } from "vite";
-import { DatabaseState, Ticket, RaffleSettings, ThemeType, DiaperSize, PaymentOption } from "./src/types.js";
+import { DatabaseState, Ticket, RaffleSettings, ThemeType, DiaperSize, PaymentOption } from "./src/types";
 
 dotenv.config();
 
@@ -429,63 +429,93 @@ initDatabase()
 
   // Get public raffle info: filters out PII (phones and email profiles)
   app.get("/api/raffle", async (req, res) => {
-    const db = await getRaffleState();
-    
-    // Mask tickets phone numbers for public consumption
-    const maskedTickets: Record<number, Omit<Ticket, "phone">> = {};
-    Object.entries(db.tickets).forEach(([num, ticket]) => {
-      const n = parseInt(num);
-      maskedTickets[n] = {
-        number: ticket.number,
-        status: ticket.status,
-        name: ticket.name,
-        option: ticket.option,
-        diaperSize: ticket.diaperSize,
-        pixTxid: ticket.pixTxid,
-        createdAt: ticket.createdAt,
-        paidAt: ticket.paidAt
-      };
-    });
+    try {
+      const db = await getRaffleState();
+      
+      if (!db || !db.settings) {
+        throw new Error("Estado do banco de dados retornado está vazio ou inválido.");
+      }
 
-    res.json({
-      settings: {
-        title: db.settings.title,
-        description: db.settings.description,
-        prize: db.settings.prize,
-        prizes: db.settings.prizes || (db.settings.prize ? db.settings.prize.split("|").map(p => p.trim()).filter(Boolean) : []),
-        pixKey: db.settings.pixKey || "pix-chafarifa@bancocentral.com.br",
-        pixKeyType: db.settings.pixKeyType || "Chave Aleatória",
-        theme: db.settings.theme,
-        raffleDate: db.settings.raffleDate,
-        ticketPrice: db.settings.ticketPrice,
-        allowDiaper: db.settings.allowDiaper,
-        allowPix: db.settings.allowPix,
-        diaperSizes: db.settings.diaperSizes,
-        numberOfTickets: db.settings.numberOfTickets,
-        isDemoKey: db.settings.adminKey === "admin123",
-        diaperRanges: db.settings.diaperRanges || [],
-        pixQrCode: db.settings.pixQrCode || "",
-        whatsappNumber: db.settings.whatsappNumber || "11999999999",
-        pixCopyAndPaste: db.settings.pixCopyAndPaste || "",
-        paymentDeadline: db.settings.paymentDeadline || "",
-        howItWorks: db.settings.howItWorks || "",
-        diaperObservation: db.settings.diaperObservation || ""
-      },
-      tickets: maskedTickets,
-      drawnNumbers: db.drawnNumbers
-    });
+      // Mask tickets phone numbers for public consumption
+      const maskedTickets: Record<number, Omit<Ticket, "phone">> = {};
+      if (db.tickets) {
+        Object.entries(db.tickets).forEach(([num, ticket]) => {
+          const n = parseInt(num);
+          if (ticket) {
+            maskedTickets[n] = {
+              number: ticket.number,
+              status: ticket.status,
+              name: ticket.name,
+              option: ticket.option,
+              diaperSize: ticket.diaperSize,
+              pixTxid: ticket.pixTxid,
+              createdAt: ticket.createdAt,
+              paidAt: ticket.paidAt
+            };
+          }
+        });
+      }
+
+      res.json({
+        settings: {
+          title: db.settings.title,
+          description: db.settings.description,
+          prize: db.settings.prize,
+          prizes: db.settings.prizes || (db.settings.prize ? db.settings.prize.split("|").map(p => p.trim()).filter(Boolean) : []),
+          pixKey: db.settings.pixKey || "pix-chafarifa@bancocentral.com.br",
+          pixKeyType: db.settings.pixKeyType || "Chave Aleatória",
+          theme: db.settings.theme,
+          raffleDate: db.settings.raffleDate,
+          ticketPrice: db.settings.ticketPrice,
+          allowDiaper: db.settings.allowDiaper,
+          allowPix: db.settings.allowPix,
+          diaperSizes: db.settings.diaperSizes,
+          numberOfTickets: db.settings.numberOfTickets,
+          isDemoKey: db.settings.adminKey === "admin123",
+          diaperRanges: db.settings.diaperRanges || [],
+          pixQrCode: db.settings.pixQrCode || "",
+          whatsappNumber: db.settings.whatsappNumber || "11999999999",
+          pixCopyAndPaste: db.settings.pixCopyAndPaste || "",
+          paymentDeadline: db.settings.paymentDeadline || "",
+          howItWorks: db.settings.howItWorks || "",
+          diaperObservation: db.settings.diaperObservation || ""
+        },
+        tickets: maskedTickets,
+        drawnNumbers: db.drawnNumbers || []
+      });
+    } catch (routeErr: any) {
+      console.error("[API_ERROR] Falha na rota /api/raffle:", routeErr);
+      res.status(500).json({
+        success: false,
+        error: routeErr.message || String(routeErr),
+        stack: routeErr.stack
+      });
+    }
   });
 
   // Verify Admin Key and return full state (with PII)
   app.get("/api/raffle/admin", async (req, res) => {
-    const key = req.headers["x-admin-key"] || req.query.key;
-    const db = await getRaffleState();
+    try {
+      const key = req.headers["x-admin-key"] || req.query.key;
+      const db = await getRaffleState();
 
-    if (!key || key !== db.settings.adminKey) {
-      return res.status(401).json({ error: "Chave de administrador inválida ou não fornecida." });
+      if (!db || !db.settings) {
+        throw new Error("Estado do banco de dados retornado está vazio ou inválido.");
+      }
+
+      if (!key || key !== db.settings.adminKey) {
+        return res.status(401).json({ error: "Chave de administrador inválida ou não fornecida." });
+      }
+
+      res.json(db);
+    } catch (routeErr: any) {
+      console.error("[API_ERROR] Falha na rota /api/raffle/admin:", routeErr);
+      res.status(500).json({
+        success: false,
+        error: routeErr.message || String(routeErr),
+        stack: routeErr.stack
+      });
     }
-
-    res.json(db);
   });
 
   // Reserve a number or multiple numbers
