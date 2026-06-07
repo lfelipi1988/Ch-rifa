@@ -2,15 +2,20 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import pg from "pg";
+import dotenv from "dotenv";
+import { createClient } from "@supabase/supabase-js";
 import { createServer as createViteServer } from "vite";
 import { DatabaseState, Ticket, RaffleSettings, ThemeType, DiaperSize, PaymentOption } from "./src/types.js";
+
+dotenv.config();
 
 const { Pool } = pg;
 const PORT = 3000;
 const DB_FILE = path.join(process.cwd(), "db-rifa.json");
 
-// Connect pool if DATABASE_URL configuration is detected (e.g. Supabase)
+// 1. Direct Connection Pool (via DATABASE_URL string)
 let dbPool: pg.Pool | null = null;
+let dbPoolDisabled = false;
 const databaseUrl = process.env.DATABASE_URL;
 
 if (databaseUrl) {
@@ -19,36 +24,80 @@ if (databaseUrl) {
     connectionString: databaseUrl,
     ssl: {
       rejectUnauthorized: false
-    }
+    },
+    connectionTimeoutMillis: 1000, // Wait max 1 second to connect
+    query_timeout: 1000,            // Wait max 1 second for queries to respond
   });
-} else {
-  console.log("[Local Conn] DATABASE_URL não declarada. Usando persistência baseada em arquivo JSON local.");
 }
 
-// Automatically create tables on start if using Postgres
+// 2. HTTP Connection Client (via SUPABASE_URL & SUPABASE_ANON_KEY API creds)
+let supabaseClient: any = null;
+let supabaseUrl = process.env.SUPABASE_URL;
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+
+if (supabaseUrl && supabaseAnonKey) {
+  // Normalize url if it ends with /rest/v1/
+  supabaseUrl = supabaseUrl.trim().replace(/\/rest\/v1\/?$/, "");
+  console.log(`[Supabase REST] Credenciais da API detectadas (${supabaseUrl}). Conectando...`);
+  supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+}
+
+if (!databaseUrl && (!supabaseUrl || !supabaseAnonKey)) {
+  console.log("[Local Conn] Nenhuma senha de nuvem declarada. Usando persistência baseada em arquivo JSON local.");
+}
+
+// Automatically create tables on start if using Direct Postgres, or check Connection if using API Client
 async function initDatabase() {
-  if (!dbPool) return;
-  try {
-    await dbPool.query(`
-      CREATE TABLE IF NOT EXISTS raffle_state (
-        id INT PRIMARY KEY,
-        state TEXT NOT NULL
-      );
-    `);
-    
-    const countRes = await dbPool.query("SELECT COUNT(*) FROM raffle_state WHERE id = 1;");
-    const count = parseInt(countRes.rows[0].count);
-    if (count === 0) {
-      console.log("[Supabase Conn] Inicializando registro padrão de estado da rifa...");
-      const initialState = getInitialState();
-      await dbPool.query(
-        "INSERT INTO raffle_state (id, state) VALUES ($1, $2);",
-        [1, JSON.stringify(initialState)]
-      );
+  if (dbPool && !dbPoolDisabled) {
+    try {
+      await dbPool.query(`
+        CREATE TABLE IF NOT EXISTS raffle_state (
+          id INT PRIMARY KEY,
+          state TEXT NOT NULL
+        );
+      `);
+      
+      const countRes = await dbPool.query("SELECT COUNT(*) FROM raffle_state WHERE id = 1;");
+      const count = parseInt(countRes.rows[0].count);
+      if (count === 0) {
+        console.log("[Supabase Conn] Inicializando registro padrão de estado da rifa...");
+        const initialState = getInitialState();
+        await dbPool.query(
+          "INSERT INTO raffle_state (id, state) VALUES ($1, $2);",
+          [1, JSON.stringify(initialState)]
+        );
+      }
+      console.log("[Supabase Conn] Tabelas do banco de dados verificadas e prontas!");
+    } catch (err) {
+      console.error("[Supabase Conn] Erro/Timeout na conexão PostgreSQL direta. Desativando pool...");
+      dbPoolDisabled = true;
     }
-    console.log("[Supabase Conn] Tabelas do banco de dados verificadas e prontas!");
-  } catch (err) {
-    console.error("[Supabase Conn] Erro na criação de tabelas PostgreSQL:", err);
+  }
+  
+  if (supabaseClient) {
+    try {
+      // Test querying the table
+      const { data, error } = await supabaseClient.from("raffle_state").select("state").eq("id", 1);
+      if (error) {
+        if (error.code === "PGRST116" || error.message?.includes("does not exist")) {
+          console.log("[Supabase REST] Tabela 'raffle_state' não encontrada no seu projeto Supabase.");
+          console.log("[Supabase REST] Por favor, vá ao SQL Editor no Painel do Supabase e execute o comando de criação da tabela.");
+        } else {
+          console.error("[Supabase REST] Erro ao carregar do Supabase REST:", error.message);
+        }
+      } else if (!data || data.length === 0) {
+        console.log("[Supabase REST] Sincronização REST: Inicializando registro padrão de estado no Supabase...");
+        const initialState = getInitialState();
+        const { error: insertError } = await supabaseClient.from("raffle_state").insert({ id: 1, state: JSON.stringify(initialState) });
+        if (insertError) {
+          console.error("[Supabase REST] Erro ao criar registro inicial no Supabase REST:", insertError.message);
+        }
+      } else {
+        console.log("[Supabase REST] Conexão com Supabase via REST bem sucedida!");
+      }
+    } catch (err) {
+      console.error("[Supabase REST] Falha na inicialização da REST API:", err);
+    }
   }
 }
 
@@ -91,157 +140,114 @@ function getInitialState(): DatabaseState {
   };
 }
 
+// Run structure migrations & save if anything changes
+async function migrateAndSaveState(db: DatabaseState): Promise<DatabaseState> {
+  let dirty = false;
+  if (!db.settings) {
+    return getInitialState();
+  }
+  if (!db.settings.diaperRanges) {
+    db.settings.diaperRanges = [
+      { from: 1, to: 15, size: "P" },
+      { from: 16, to: 45, size: "M" },
+      { from: 46, to: 80, size: "G" },
+      { from: 81, to: 100, size: "GG" }
+    ];
+    dirty = true;
+  }
+  if (!db.settings.prizes) {
+    if (db.settings.prize) {
+      db.settings.prizes = db.settings.prize.split("|").map(p => p.trim()).filter(Boolean);
+    } else {
+      db.settings.prizes = ["1º Prêmio: Fritadeira Elétrica Airfryer Philips Walita"];
+    }
+    dirty = true;
+  }
+  if (!db.settings.pixKey) {
+    db.settings.pixKey = "pix-chafarifa@bancocentral.com.br";
+    db.settings.pixKeyType = "Chave Aleatória";
+    dirty = true;
+  }
+  if (!db.settings.whatsappNumber) {
+    db.settings.whatsappNumber = "11999999999";
+    dirty = true;
+  }
+  if (db.settings.pixCopyAndPaste === undefined) {
+    db.settings.pixCopyAndPaste = "";
+    dirty = true;
+  }
+  if (db.settings.paymentDeadline === undefined) {
+    const defaultDeadline = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0].split('-').reverse().join('/');
+    db.settings.paymentDeadline = defaultDeadline;
+    dirty = true;
+  }
+  if (db.settings.diaperSizes) {
+    const migrated = db.settings.diaperSizes.map(sz => sz === 'XP' as any ? 'RN' : sz) as DiaperSize[];
+    if (JSON.stringify(migrated) !== JSON.stringify(db.settings.diaperSizes)) {
+      db.settings.diaperSizes = migrated;
+      dirty = true;
+    }
+  }
+  if (db.settings.diaperRanges) {
+    db.settings.diaperRanges = db.settings.diaperRanges.map(r => {
+      if (r.size === 'XP' as any) {
+        r.size = 'RN';
+        dirty = true;
+      }
+      return r;
+    });
+  }
+  if (db.tickets) {
+    Object.values(db.tickets).forEach(t => {
+      if (t.diaperSize === 'XP' as any) {
+        t.diaperSize = 'RN';
+        dirty = true;
+      }
+    });
+  }
+
+  if (dirty) {
+    await saveRaffleState(db);
+  }
+  return db;
+}
+
 // Fetch raffle state asynchronously using active backend engine choice
 async function getRaffleState(): Promise<DatabaseState> {
-  if (dbPool) {
+  // Try direct Postgres
+  if (dbPool && !dbPoolDisabled) {
     try {
       const res = await dbPool.query("SELECT state FROM raffle_state WHERE id = 1;");
       if (res.rows.length > 0) {
         const db: DatabaseState = JSON.parse(res.rows[0].state);
-        
-        // Auto-run standard state structure self-repair migrations
-        let dirty = false;
-        if (!db.settings) {
-          return getInitialState();
-        }
-        if (!db.settings.diaperRanges) {
-          db.settings.diaperRanges = [
-            { from: 1, to: 15, size: "P" },
-            { from: 16, to: 45, size: "M" },
-            { from: 46, to: 80, size: "G" },
-            { from: 81, to: 100, size: "GG" }
-          ];
-          dirty = true;
-        }
-        if (!db.settings.prizes) {
-          if (db.settings.prize) {
-            db.settings.prizes = db.settings.prize.split("|").map(p => p.trim()).filter(Boolean);
-          } else {
-            db.settings.prizes = ["1º Prêmio: Fritadeira Elétrica Airfryer Philips Walita"];
-          }
-          dirty = true;
-        }
-        if (!db.settings.pixKey) {
-          db.settings.pixKey = "pix-chafarifa@bancocentral.com.br";
-          db.settings.pixKeyType = "Chave Aleatória";
-          dirty = true;
-        }
-        if (!db.settings.whatsappNumber) {
-          db.settings.whatsappNumber = "11999999999";
-          dirty = true;
-        }
-        if (db.settings.pixCopyAndPaste === undefined) {
-          db.settings.pixCopyAndPaste = "";
-          dirty = true;
-        }
-        if (db.settings.paymentDeadline === undefined) {
-          const defaultDeadline = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0].split('-').reverse().join('/');
-          db.settings.paymentDeadline = defaultDeadline;
-          dirty = true;
-        }
-        if (db.settings.diaperSizes) {
-          const migrated = db.settings.diaperSizes.map(sz => sz === 'XP' as any ? 'RN' : sz) as DiaperSize[];
-          if (JSON.stringify(migrated) !== JSON.stringify(db.settings.diaperSizes)) {
-            db.settings.diaperSizes = migrated;
-            dirty = true;
-          }
-        }
-        if (db.settings.diaperRanges) {
-          db.settings.diaperRanges = db.settings.diaperRanges.map(r => {
-            if (r.size === 'XP' as any) {
-              r.size = 'RN';
-              dirty = true;
-            }
-            return r;
-          });
-        }
-        if (db.tickets) {
-          Object.values(db.tickets).forEach(t => {
-            if (t.diaperSize === 'XP' as any) {
-              t.diaperSize = 'RN';
-              dirty = true;
-            }
-          });
-        }
-
-        if (dirty) {
-          await saveRaffleState(db);
-        }
-        return db;
+        return await migrateAndSaveState(db);
       }
     } catch (err) {
-      console.error("[Supabase Conn] Falha ao ler do SQL. Acionando fallback local temporário:", err);
+      console.error("[Supabase Conn] Falha ao ler do SQL. Desativando pool direto de Postgres:", err);
+      dbPoolDisabled = true;
+    }
+  }
+  // Try client-side API
+  else if (supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient.from("raffle_state").select("state").eq("id", 1).single();
+      if (error) {
+        console.error("[Supabase REST] Erro ao ler dados via REST:", error.message);
+      } else if (data && data.state) {
+        const db: DatabaseState = typeof data.state === "string" ? JSON.parse(data.state) : data.state;
+        return await migrateAndSaveState(db);
+      }
+    } catch (err) {
+      console.error("[Supabase REST] Exception ao ler do REST API:", err);
     }
   }
 
+  // Fallback to reading database from file system
   try {
     if (fs.existsSync(DB_FILE)) {
       const data = fs.readFileSync(DB_FILE, "utf-8");
       const db: DatabaseState = JSON.parse(data);
-      let dirty = false;
-      if (!db.settings.diaperRanges) {
-        db.settings.diaperRanges = [
-          { from: 1, to: 15, size: "P" },
-          { from: 16, to: 45, size: "M" },
-          { from: 46, to: 80, size: "G" },
-          { from: 81, to: 100, size: "GG" }
-        ];
-        dirty = true;
-      }
-      if (!db.settings.prizes) {
-        if (db.settings.prize) {
-          db.settings.prizes = db.settings.prize.split("|").map(p => p.trim()).filter(Boolean);
-        } else {
-          db.settings.prizes = ["1º Prêmio: Fritadeira Elétrica Airfryer Philips Walita"];
-        }
-        dirty = true;
-      }
-      if (!db.settings.pixKey) {
-        db.settings.pixKey = "pix-chafarifa@bancocentral.com.br";
-        db.settings.pixKeyType = "Chave Aleatória";
-        dirty = true;
-      }
-      if (!db.settings.whatsappNumber) {
-        db.settings.whatsappNumber = "11999999999";
-        dirty = true;
-      }
-      if (db.settings.pixCopyAndPaste === undefined) {
-        db.settings.pixCopyAndPaste = "";
-        dirty = true;
-      }
-      if (db.settings.paymentDeadline === undefined) {
-        const defaultDeadline = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0].split('-').reverse().join('/');
-        db.settings.paymentDeadline = defaultDeadline;
-        dirty = true;
-      }
-      if (db.settings.diaperSizes) {
-        const migrated = db.settings.diaperSizes.map(sz => sz === 'XP' as any ? 'RN' : sz) as DiaperSize[];
-        if (JSON.stringify(migrated) !== JSON.stringify(db.settings.diaperSizes)) {
-          db.settings.diaperSizes = migrated;
-          dirty = true;
-        }
-      }
-      if (db.settings.diaperRanges) {
-        db.settings.diaperRanges = db.settings.diaperRanges.map(r => {
-          if (r.size === 'XP' as any) {
-            r.size = 'RN';
-            dirty = true;
-          }
-          return r;
-        });
-      }
-      if (db.tickets) {
-        Object.values(db.tickets).forEach(t => {
-          if (t.diaperSize === 'XP' as any) {
-            t.diaperSize = 'RN';
-            dirty = true;
-          }
-        });
-      }
-      if (dirty) {
-        fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), "utf-8");
-      }
-      return db;
+      return await migrateAndSaveState(db);
     }
   } catch (error) {
     console.error("Erro ao ler DB do arquivo, usando estado inicial:", error);
@@ -258,7 +264,7 @@ async function getRaffleState(): Promise<DatabaseState> {
 
 // Persist raffle state asynchronously
 async function saveRaffleState(state: DatabaseState): Promise<void> {
-  if (dbPool) {
+  if (dbPool && !dbPoolDisabled) {
     try {
       await dbPool.query(
         "UPDATE raffle_state SET state = $1 WHERE id = 1;",
@@ -266,7 +272,23 @@ async function saveRaffleState(state: DatabaseState): Promise<void> {
       );
       return;
     } catch (err) {
-      console.error("[Supabase Conn] Falha ao persistir no SQL. Acionando fallback local:", err);
+      console.error("[Supabase Conn] Falha ao persistir no SQL. Desativando pool direto de Postgres:", err);
+      dbPoolDisabled = true;
+    }
+  }
+  
+  if (supabaseClient) {
+    try {
+      const { error } = await supabaseClient
+        .from("raffle_state")
+        .upsert({ id: 1, state: JSON.stringify(state) });
+      if (error) {
+        console.error("[Supabase REST] Falha ao salvar via REST API:", error.message);
+      } else {
+        return;
+      }
+    } catch (err) {
+      console.error("[Supabase REST] Exception ao persistir no REST API:", err);
     }
   }
 
@@ -288,42 +310,119 @@ async function startServer() {
 
   // API ROUTES
 
-  // Test Database Connection (Supabase / Postgres)
+  // Test Database Connection (Supabase / Postgres / REST API)
   app.get("/api/raffle/db-test", async (req, res) => {
     const databaseUrl = process.env.DATABASE_URL;
-    if (!databaseUrl) {
+    const url = process.env.SUPABASE_URL;
+    const key = process.env.SUPABASE_ANON_KEY;
+
+    if (!databaseUrl && (!url || !key)) {
       return res.json({
         success: false,
         mode: "local",
-        message: "Variável DATABASE_URL não declarada nas variáveis de ambiente. O sistema está usando armazenamento JSON local (.json)."
+        message: "Nenhuma credencial do Supabase declarada nas configurações (DATABASE_URL ou SUPABASE_URL + SUPABASE_ANON_KEY). O sistema está no modo JSON local seguro."
       });
     }
 
-    if (!dbPool) {
-      return res.json({
-        success: false,
-        mode: "supabase",
-        message: "O pool de conexão PostgreSQL/Supabase não pôde ser iniciado. Verifique o formato da URL."
-      });
+    // Direct Postgres
+    if (databaseUrl && dbPool) {
+      try {
+        const start = Date.now();
+        const dbRes = await dbPool.query("SELECT NOW();");
+        const duration = Date.now() - start;
+        dbPoolDisabled = false; // Reset if it successfully connected!
+        return res.json({
+          success: true,
+          mode: "supabase",
+          message: `Conexão bem sucedida (via PostgreSQL direto)! Servidor respondeu: ${dbRes.rows[0].now}`,
+          durationMs: duration
+        });
+      } catch (err: any) {
+        // If timed out or caught, we disable direct pool
+        dbPoolDisabled = true;
+        const msg = err.message || String(err);
+        const isTimeout = msg.includes("timeout") || msg.includes("ETIMEDOUT");
+        
+        // Since direct connection failed, we fall back to check if Supabase Client is working instead
+        if (supabaseClient) {
+          try {
+            const startRest = Date.now();
+            const { error: restError } = await supabaseClient.from("raffle_state").select("state").eq("id", 1);
+            const durationRest = Date.now() - startRest;
+            if (!restError) {
+              return res.json({
+                success: true,
+                mode: "supabase",
+                message: `O acesso direto via PostgreSQL (porta 5432) falhou por timeout, porém a sua API REST do Supabase (porta 443) foi testada e está FUNCIONANDO PERFEITAMENTE! O sistema usará este canal seguro para salvar os bilhetes.`,
+                durationMs: durationRest
+              });
+            } else if (restError.code === "PGRST116" || restError.message?.includes("does not exist")) {
+              return res.json({
+                success: false,
+                mode: "supabase_rest_needs_table",
+                message: `O banco está respondendo na API REST do Supabase, mas a tabela 'raffle_state' ainda não foi criada. Por favor, crie-a no painel do Supabase. (Erro original do Postgres direto: ${msg})`,
+                durationMs: durationRest
+              });
+            }
+          } catch (restErr: any) {
+            // fall through
+          }
+        }
+        
+        return res.json({
+          success: false,
+          mode: "supabase",
+          message: `Conexão direta ao banco PostgreSQL falhou: ${msg}. ${
+            isTimeout ? "Nota: conexões diretas na porta 5432 estão bloqueadas no Sandbox. Use as credenciais SUPABASE_URL e SUPABASE_ANON_KEY para usar a conexão HTTP na porta de navegação comum (443)!" : ""
+          }`
+        });
+      }
     }
 
-    try {
-      const start = Date.now();
-      const dbRes = await dbPool.query("SELECT NOW();");
-      const duration = Date.now() - start;
-      return res.json({
-        success: true,
-        mode: "supabase",
-        message: `Conexão bem sucedida com o Supabase! Retornou: ${dbRes.rows[0].now}`,
-        durationMs: duration
-      });
-    } catch (err: any) {
-      return res.json({
-        success: false,
-        mode: "supabase",
-        message: `Erro ao conectar e executar query no Supabase: ${err.message || err}`
-      });
+    // Client-side API
+    if (supabaseClient) {
+      try {
+        const start = Date.now();
+        const { data, error } = await supabaseClient.from("raffle_state").select("state").eq("id", 1);
+        const duration = Date.now() - start;
+
+        if (error) {
+          if (error.code === "PGRST116" || error.message?.includes("does not exist")) {
+            return res.json({
+              success: false,
+              mode: "supabase_rest_needs_table",
+              message: "Conectado com o Supabase! Porém, a tabela 'raffle_state' de persistência não existe. Você precisa criá-la no editor SQL do Supabase.",
+              durationMs: duration
+            });
+          }
+          return res.json({
+            success: false,
+            mode: "supabase_rest_error",
+            message: `Erro ao fazer requisição REST ao Supabase: ${error.message} (Código ${error.code})`,
+            durationMs: duration
+          });
+        }
+
+        return res.json({
+          success: true,
+          mode: "supabase",
+          message: "Conexão via REST API do Supabase funcionando perfeitamente! Os dados estão sendo sincronizados com sucesso.",
+          durationMs: duration
+        });
+      } catch (err: any) {
+        return res.json({
+          success: false,
+          mode: "supabase_rest_error",
+          message: `Exception ao testar conexão Supabase REST: ${err.message || err}`
+        });
+      }
     }
+
+    return res.json({
+      success: false,
+      mode: "local",
+      message: "Credenciais de API declaradas mas cliente incorreto ou inicialização falhou."
+    });
   });
 
   // Get public raffle info: filters out PII (phones and email profiles)

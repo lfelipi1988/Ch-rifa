@@ -106,10 +106,11 @@ export default function AdminDashboard({
   const [dbTestResult, setDbTestResult] = useState<{
     loading: boolean;
     success?: boolean;
-    mode?: 'supabase' | 'local';
+    mode?: string;
     message?: string;
     durationMs?: number;
   } | null>(null);
+  const [copiedSql, setCopiedSql] = useState(false);
 
   const handleTestDbConnection = async () => {
     setDbTestResult({ loading: true });
@@ -1529,34 +1530,71 @@ export default function AdminDashboard({
                 </button>
 
                 {dbTestResult && !dbTestResult.loading && (
-                  <div className={`p-3 rounded-xl border text-[10px] space-y-1.5 animate-fadeIn ${
+                  <div className={`p-4 rounded-2xl border text-[10px] space-y-2 animate-fadeIn ${
                     dbTestResult.success 
                       ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-800 dark:text-emerald-300' 
-                      : dbTestResult.mode === 'local'
-                        ? 'bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-350'
+                      : (dbTestResult.mode === 'local' || dbTestResult.mode === 'supabase_rest_needs_table')
+                        ? 'bg-amber-500/10 border-amber-500/20 text-amber-900 dark:text-amber-300'
                         : 'bg-red-500/10 border-red-500/20 text-red-700 dark:text-red-450'
                   }`}>
                     <div className="flex items-center justify-between font-bold">
                       <span className="uppercase tracking-wider text-[8px] font-black">
-                        Modo Atual: {dbTestResult.mode === 'supabase' ? '☁️ SUPABASE (Postgres)' : '📁 JSON LOCAL'}
+                        Modo Atual: {dbTestResult.mode?.startsWith('supabase') ? '☁️ SUPABASE (Postgres)' : '📁 JSON LOCAL'}
                       </span>
                       {dbTestResult.durationMs !== undefined && (
                         <span className="font-mono text-[8px] opacity-70">Ping: {dbTestResult.durationMs}ms</span>
                       )}
                     </div>
                     <p className="font-semibold leading-relaxed font-sans">{dbTestResult.message}</p>
+                    
                     {dbTestResult.success && (
                       <div className="text-[9px] text-emerald-600 dark:text-emerald-400 font-medium">
                         ✓ Suas tabelas e estruturas padrão estão criadas e respondendo perfeitamente nos servidores do Supabase. Todos os bilhetes e prêmios são guardados com segurança máxima!
                       </div>
                     )}
+
+                    {dbTestResult.mode === 'supabase_rest_needs_table' && (
+                      <div className="text-[9.5px] text-stone-600 dark:text-stone-300 font-medium space-y-2 mt-2 bg-white/50 dark:bg-black/30 p-3 rounded-xl border border-amber-500/10">
+                        <p className="font-bold text-amber-700 dark:text-amber-400">⚡ Para finalizar, execute este comando no Supabase:</p>
+                        <p>Copie o código SQL abaixo, vá no menu lateral esquerdo do Supabase, clique em <strong className="font-bold">SQL Editor</strong>, crie um <strong className="font-bold">New Query</strong>, cole e clique em <strong className="font-bold">Run</strong>:</p>
+                        
+                        <div className="relative bg-stone-900 text-stone-200 dark:bg-black dark:text-stone-300 p-2.5 rounded-xl font-mono text-[9px] border border-stone-800 dark:border-stone-850 flex justify-between items-start gap-2">
+                          <pre className="overflow-x-auto whitespace-pre-wrap flex-1 leading-normal pr-4">
+{`CREATE TABLE IF NOT EXISTS public.raffle_state (
+  id INT PRIMARY KEY,
+  state TEXT NOT NULL
+);
+
+ALTER TABLE public.raffle_state DISABLE ROW LEVEL SECURITY;`}
+                          </pre>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(`CREATE TABLE IF NOT EXISTS public.raffle_state (
+  id INT PRIMARY KEY,
+  state TEXT NOT NULL
+);
+
+ALTER TABLE public.raffle_state DISABLE ROW LEVEL SECURITY;`);
+                              setCopiedSql(true);
+                              setTimeout(() => setCopiedSql(false), 2000);
+                            }}
+                            className="p-1.5 bg-stone-800 hover:bg-stone-750 active:scale-95 text-stone-400 hover:text-white rounded-lg transition-all cursor-pointer shrink-0"
+                            title="Copiar Código"
+                          >
+                            {copiedSql ? <span className="text-[8px] font-bold text-emerald-400 font-sans">Copiado!</span> : <Copy size={11} />}
+                          </button>
+                        </div>
+                        <p className="text-[8.5px] text-amber-600 dark:text-amber-400/80 italic">💡 Isso criará a tabela e liberará o acesso seguro para a API anônima salvar os bilhetes corretamente.</p>
+                      </div>
+                    )}
+
                     {!dbTestResult.success && dbTestResult.mode === 'local' && (
-                      <div className="text-[9px] text-amber-600 dark:text-amber-400 font-medium space-y-1">
+                      <div className="text-[9px] text-amber-700 dark:text-amber-400 font-medium space-y-1">
                         <p>💡 Para conectar com seu banco de dados Supabase e ter persistência definitiva:</p>
                         <ol className="list-decimal list-inside space-y-0.5">
                           <li>Crie um projeto gratuito no site do Supabase.</li>
-                          <li>Vá nas configurações e obtenha a <strong className="font-bold">URI de conexão direta</strong> (PostgreSQL).</li>
-                          <li>Insira-a na variável <strong className="font-mono bg-amber-500/10 px-1 py-0.5 rounded">DATABASE_URL</strong> na aba de Configurações deste Workspace.</li>
+                          <li>Adicione as variáveis de ambiente <strong className="font-mono bg-amber-500/10 px-1 py-0.5 rounded">SUPABASE_URL</strong> e <strong className="font-mono bg-amber-500/10 px-1 py-0.5 rounded">SUPABASE_ANON_KEY</strong> nas Configurações deste Workspace.</li>
                         </ol>
                       </div>
                     )}
