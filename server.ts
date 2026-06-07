@@ -11,7 +11,9 @@ dotenv.config();
 
 const { Pool } = pg;
 const PORT = 3000;
-const DB_FILE = path.join(process.cwd(), "db-rifa.json");
+const DB_FILE = process.env.VERCEL 
+  ? path.join("/tmp", "db-rifa.json")
+  : path.join(process.cwd(), "db-rifa.json");
 
 // 1. Direct Connection Pool (via DATABASE_URL string)
 let dbPool: pg.Pool | null = null;
@@ -299,16 +301,16 @@ async function saveRaffleState(state: DatabaseState): Promise<void> {
   }
 }
 
-async function startServer() {
-  const app = express();
-  app.use(express.json({ limit: "15mb" }));
-  app.use(express.urlencoded({ limit: "15mb", extended: true }));
+const app = express();
+app.use(express.json({ limit: "15mb" }));
+app.use(express.urlencoded({ limit: "15mb", extended: true }));
 
-  // Initialize DB on server start
-  await initDatabase();
-  await getRaffleState();
+// Lazily kick off DB initialization (non-blocking)
+initDatabase()
+  .then(() => getRaffleState())
+  .catch(err => console.error("[Database] Erro de inicialização:", err));
 
-  // API ROUTES
+// API ROUTES
 
   // Test Database Connection (Supabase / Postgres / REST API)
   app.get("/api/raffle/db-test", async (req, res) => {
@@ -770,24 +772,28 @@ async function startServer() {
     res.json({ message: "Banco de rifas reiniciado com sucesso!", db: clearedDb });
   });
 
-  // Vite Integration after our API routes
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+  // Vite Integration after our API routes (skip on Vercel as it serves static files built from dist natively)
+  if (!process.env.VERCEL) {
+    async function configureStaticAndListen() {
+      if (process.env.NODE_ENV !== "production") {
+        const vite = await createViteServer({
+          server: { middlewareMode: true },
+          appType: "spa",
+        });
+        app.use(vite.middlewares);
+      } else {
+        const distPath = path.join(process.cwd(), "dist");
+        app.use(express.static(distPath));
+        app.get("*", (req, res) => {
+          res.sendFile(path.join(distPath, "index.html"));
+        });
+      }
+
+      app.listen(PORT, "0.0.0.0", () => {
+        console.log(`[Chá Rifa Hub] rodando com sucesso no endereço http://localhost:${PORT}`);
+      });
+    }
+    configureStaticAndListen();
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[Chá Rifa Hub] rodando com sucesso no endereço http://localhost:${PORT}`);
-  });
-}
-
-startServer();
+  export default app;
