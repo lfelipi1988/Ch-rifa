@@ -6,6 +6,12 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
+@variant dark (&:where(.dark, .dark *));
+
+html {
+  color-scheme: light;
+}
+
 /* Base custom classes to complement Tailwind v4 */
 .font-astronaut {
   font-family: 'Orbitron', sans-serif;
@@ -26,7 +32,7 @@
 
 /* Theme backgrounds and accents */
 .bg-gradient-astronaut {
-  background: radial-gradient(circle at top, #1e1b4b 0%, #03001e 50%, #000000 100%);
+  background: radial-gradient(circle at top, #f5f3ff 0%, #e0e7ff 60%, #c7d2fe 100%);
 }
 
 .bg-gradient-safari {
@@ -48,8 +54,8 @@
 }
 
 .pattern-stars {
-  background-image: radial-gradient(rgba(255, 255, 255, 0.15) 1px, transparent 0),
-                    radial-gradient(rgba(255, 255, 255, 0.2) 2px, transparent 0);
+  background-image: radial-gradient(rgba(99, 102, 241, 0.15) 1.5px, transparent 0),
+                    radial-gradient(rgba(99, 102, 241, 0.2) 2.5px, transparent 0);
   background-size: 40px 40px, 80px 80px;
   background-position: 0 0, 20px 20px;
 }

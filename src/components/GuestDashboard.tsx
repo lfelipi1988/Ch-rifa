@@ -114,13 +114,13 @@ export default function GuestDashboard({
     switch (theme.id) {
       case 'astronaut':
         return (
-          <div className="flex flex-col items-center justify-center p-6 bg-gradient-to-br from-[#0B0C24] via-[#151745] to-[#08091E] rounded-3xl border border-cyan-500/30 text-center space-y-3 relative overflow-hidden shadow-md shadow-indigo-950/40">
+          <div className="flex flex-col items-center justify-center p-6 bg-gradient-to-br from-indigo-50/80 via-purple-100/50 to-indigo-100/60 rounded-3xl border border-indigo-200 text-center space-y-3 relative overflow-hidden shadow-xs">
             <span className="text-6xl animate-bounce duration-1000 inline-block">👨‍🚀</span>
-            <div className="absolute top-2 left-6 text-xl opacity-30 animate-pulse">🛸</div>
-            <div className="absolute bottom-4 right-10 text-xl opacity-20">🪐</div>
+            <div className="absolute top-2 left-6 text-xl opacity-40 animate-pulse">🛸</div>
+            <div className="absolute bottom-4 right-10 text-xl opacity-30">🪐</div>
             <div className="space-y-1">
-              <h3 className="text-sm font-bold text-cyan-400 font-sans uppercase tracking-widest">Nave espacial baby</h3>
-              <p className="text-[10px] text-indigo-200">Embarque nessa jornada espacial para comemorar a vinda do bebê nas estrelas!</p>
+              <h3 className="text-sm font-black text-indigo-900 font-sans uppercase tracking-wider">Nave espacial baby</h3>
+              <p className="text-[10.5px] font-medium text-indigo-750">Embarque nessa jornada espacial para comemorar a vinda do bebê nas estrelas!</p>
             </div>
           </div>
         );
@@ -169,6 +169,88 @@ export default function GuestDashboard({
     }
   };
 
+  const getPrizesBoxStyle = () => {
+    switch (theme.id) {
+      case 'astronaut':
+        return {
+          container: "p-4.5 bg-indigo-50/75 border border-indigo-150/40 rounded-2xl space-y-3",
+          titleText: "text-indigo-950 font-black",
+          itemCard: "flex flex-col justify-between p-3.5 bg-white/90 hover:bg-indigo-50/40 border border-indigo-100/60 rounded-2xl transition-all shadow-xs gap-3",
+          badge: "bg-indigo-100/80 text-indigo-800 font-extrabold",
+          tagtext: "text-indigo-500 font-black",
+          bodyText: "text-indigo-950",
+          borderLine: "border-indigo-100/60",
+          statusLabel: "text-indigo-600 font-black",
+          awaitingText: "text-indigo-700 font-bold",
+          awaitingDot: "bg-indigo-600",
+          drawnNum: "bg-indigo-600 text-white font-extrabold",
+          drawnHolder: "text-indigo-955 font-black"
+        };
+      case 'safari':
+        return {
+          container: "p-4.5 bg-emerald-50/60 border border-emerald-800/10 rounded-2xl space-y-3",
+          titleText: "text-emerald-950 font-black",
+          itemCard: "flex flex-col justify-between p-3.5 bg-white/90 hover:bg-emerald-50/40 border border-emerald-100/40 rounded-2xl transition-all shadow-xs gap-3",
+          badge: "bg-emerald-100/80 text-emerald-800 font-extrabold",
+          tagtext: "text-emerald-700 font-black",
+          bodyText: "text-emerald-955",
+          borderLine: "border-emerald-100/50",
+          statusLabel: "text-emerald-800 font-black",
+          awaitingText: "text-emerald-700 font-bold",
+          awaitingDot: "bg-emerald-700",
+          drawnNum: "bg-emerald-700 text-white font-extrabold",
+          drawnHolder: "text-emerald-955 font-black"
+        };
+      case 'floral':
+        return {
+          container: "p-4.5 bg-rose-50/60 border border-rose-200/40 rounded-2xl space-y-3",
+          titleText: "text-rose-950 font-black",
+          itemCard: "flex flex-col justify-between p-3.5 bg-white/95 hover:bg-rose-55/30 border border-rose-100/60 rounded-2xl transition-all shadow-xs gap-3",
+          badge: "bg-rose-100/80 text-rose-800 font-extrabold",
+          tagtext: "text-rose-600/90 font-black",
+          bodyText: "text-rose-955",
+          borderLine: "border-rose-150/40",
+          statusLabel: "text-rose-700 font-black",
+          awaitingText: "text-rose-600 font-bold",
+          awaitingDot: "bg-rose-600",
+          drawnNum: "bg-rose-600 text-white font-extrabold",
+          drawnHolder: "text-rose-955 font-black"
+        };
+      case 'natural':
+        return {
+          container: "p-4.5 bg-[#F9F7F2]/90 border border-[#E5DCC3] rounded-2xl space-y-3",
+          titleText: "text-[#5A5A40] font-black",
+          itemCard: "flex flex-col justify-between p-3.5 bg-white hover:bg-[#F9F7F2]/40 border border-[#E5DCC3]/40 rounded-2xl transition-all shadow-xs gap-3",
+          badge: "bg-[#E5DCC3]/50 text-[#5a5a40]/90 font-extrabold",
+          tagtext: "text-[#6B645E]/90 font-black",
+          bodyText: "text-[#433D40]",
+          borderLine: "border-[#E5DCC3]/30",
+          statusLabel: "text-[#6B645E] font-black",
+          awaitingText: "text-[#5A5A40] font-bold",
+          awaitingDot: "bg-[#5A5A40]",
+          drawnNum: "bg-[#5A5A40] text-white font-extrabold",
+          drawnHolder: "text-[#433D40] font-black"
+        };
+      default:
+        return {
+          container: "p-4.5 bg-stone-50 border border-stone-200 rounded-2xl space-y-3",
+          titleText: "text-stone-900 font-black",
+          itemCard: "flex flex-col justify-between p-3.5 bg-white hover:bg-stone-50 border border-stone-200 rounded-2xl transition-all shadow-xs gap-3",
+          badge: "bg-stone-100 text-stone-800 font-extrabold",
+          tagtext: "text-stone-600 font-black",
+          bodyText: "text-stone-900",
+          borderLine: "border-stone-150",
+          statusLabel: "text-stone-700 font-black",
+          awaitingText: "text-stone-600 font-bold",
+          awaitingDot: "bg-stone-600",
+          drawnNum: "bg-stone-700 text-white font-extrabold",
+          drawnHolder: "text-stone-900 font-black"
+        };
+    }
+  };
+
+  const prizeStyles = getPrizesBoxStyle();
+
   return (
     <div id="guest-dashboard-root" className="space-y-6">
       
@@ -192,8 +274,8 @@ export default function GuestDashboard({
           </div>
           <h1 className={`text-2xl md:text-3xl font-extrabold ${theme.fontClass}`}>{settings.title}</h1>
 
-          <div className="p-4 bg-black/15 dark:bg-black/25 rounded-2xl border border-white/5 space-y-2.5">
-            <h4 className="text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 text-yellow-400">
+          <div className={prizeStyles.container}>
+            <h4 className={`text-xs font-black uppercase tracking-wider flex items-center gap-1.5 ${prizeStyles.titleText}`}>
               <Trophy size={13} className="animate-pulse" /> Sorteio das Premiações:
             </h4>
             
@@ -208,35 +290,35 @@ export default function GuestDashboard({
                   const holder = winningNum !== undefined ? tickets[winningNum] : null;
                   
                   return (
-                    <div key={idx} className="flex flex-col justify-between p-3.5 bg-white/5 hover:bg-white/10 dark:bg-black/20 hover:dark:bg-black/30 border border-white/5 rounded-2xl transition-all shadow-xs gap-3">
+                    <div key={idx} className={prizeStyles.itemCard}>
                       <div className="flex items-start gap-2.5 overflow-hidden">
-                        <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-yellow-500/15 text-yellow-500 dark:text-yellow-400 font-black text-xs shrink-0 font-mono">
+                        <span className={`flex items-center justify-center w-6 h-6 rounded-lg font-black text-xs shrink-0 font-mono ${prizeStyles.badge}`}>
                           {idx + 1}º
                         </span>
                         <div className="overflow-hidden">
-                          <span className="text-[10px] font-black text-yellow-400/80 uppercase tracking-widest block leading-none mb-1">
+                          <span className={`text-[9.5px] font-black uppercase tracking-widest block leading-none mb-1 ${prizeStyles.tagtext}`}>
                             {prizeText.split(':')[0] || `Prêmio ${idx + 1}`}
                           </span>
-                          <p className="text-xs font-bold text-stone-100/95 truncate">
+                          <p className={`text-xs font-extrabold truncate ${prizeStyles.bodyText}`}>
                             {prizeText.includes(':') ? prizeText.split(':').slice(1).join(':').trim() : prizeText}
                           </p>
                         </div>
                       </div>
                       
-                      <div className="border-t border-white/5 pt-2 flex items-center justify-between text-[11px]">
-                        <span className="text-amber-400 dark:text-amber-300 font-black uppercase text-[10px] tracking-widest animate-pulse">Status:</span>
+                      <div className={`border-t pt-2 flex items-center justify-between text-[11px] ${prizeStyles.borderLine}`}>
+                        <span className={`font-black uppercase text-[10px] tracking-widest ${prizeStyles.statusLabel}`}>Status:</span>
                         {winningNum !== undefined ? (
                           <div className="flex items-center gap-1.5">
-                            <span className="font-mono bg-yellow-500 text-stone-950 font-black px-1 rounded text-[9.5px]">
+                            <span className={`font-mono font-black px-1 rounded text-[9.5px] ${prizeStyles.drawnNum}`}>
                               Nº {String(winningNum).padStart(2, '0')}
                             </span>
-                            <span className="text-green-400 font-extrabold max-w-[100px] truncate">
+                            <span className={`font-extrabold max-w-[100px] truncate ${prizeStyles.drawnHolder}`}>
                               👑 {holder ? holder.name.split(' ')[0] : 'Ninguém (Vago)'}
                             </span>
                           </div>
                         ) : (
-                          <span className="text-amber-500 font-bold flex items-center gap-1 text-[9.5px]">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                          <span className={`font-bold flex items-center gap-1 text-[9.5px] ${prizeStyles.awaitingText}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full animate-ping ${prizeStyles.awaitingDot}`} />
                             Aguardando sorteio...
                           </span>
                         )}

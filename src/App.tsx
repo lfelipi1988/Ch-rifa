@@ -226,7 +226,7 @@ export default function App() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-stone-50 dark:bg-stone-950 flex flex-col items-center justify-center space-y-3">
+      <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center space-y-3">
         <Loader2 className="animate-spin text-amber-500" size={36} />
         <p className="text-xs font-semibold text-stone-500 uppercase tracking-widest animate-pulse">
           Carregando Chá Rifa...

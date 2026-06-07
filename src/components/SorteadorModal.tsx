@@ -176,7 +176,7 @@ export default function SorteadorModal({
       <div id="sorteador-container" className="relative w-full max-w-lg bg-white dark:bg-stone-900 rounded-3xl shadow-2xl overflow-hidden border border-stone-200 dark:border-stone-800">
         
         {/* Header decoration */}
-        <div className={`p-6 text-white text-center relative ${theme.id === 'astronaut' ? 'bg-indigo-950' : theme.id === 'floral' ? 'bg-rose-500' : theme.id === 'natural' ? 'bg-[#5A5A40]' : 'bg-emerald-700'}`}>
+        <div className={`p-6 text-white text-center relative ${theme.id === 'astronaut' ? 'bg-gradient-to-r from-indigo-500 to-indigo-600' : theme.id === 'floral' ? 'bg-rose-500' : theme.id === 'natural' ? 'bg-[#5A5A40]' : 'bg-emerald-700'}`}>
           <button 
             id="close-sorteador-btn"
             onClick={onClose} 

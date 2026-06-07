@@ -266,7 +266,7 @@ export default function PaymentModal({
       <div id="payment-modal-container" className="relative w-full max-w-md bg-white dark:bg-stone-900 rounded-3xl shadow-2xl overflow-hidden border border-stone-200 dark:border-stone-800">
         
         {/* Decorative Top Banner */}
-        <div className={`p-5 text-white ${theme.id === 'astronaut' ? 'bg-indigo-950' : theme.id === 'floral' ? 'bg-rose-500' : theme.id === 'natural' ? 'bg-[#5A5A40]' : 'bg-emerald-700'} flex items-center justify-between`}>
+        <div className={`p-5 text-white ${theme.id === 'astronaut' ? 'bg-gradient-to-r from-indigo-500 to-indigo-600' : theme.id === 'floral' ? 'bg-rose-500' : theme.id === 'natural' ? 'bg-[#5A5A40]' : 'bg-emerald-700'} flex items-center justify-between`}>
           <div className="flex items-center gap-3">
             <span className="text-2xl">{theme.bannerEmoji}</span>
             <div>
@@ -294,7 +294,7 @@ export default function PaymentModal({
               
               {/* Carrinho de Números List */}
               <div className="p-3 bg-stone-50 dark:bg-stone-950 rounded-2xl border border-stone-200 dark:border-stone-850">
-                <span className="block text-[9px] font-bold text-stone-450 uppercase mb-1.5">Números do Carrinho:</span>
+                <span className="block text-[9px] font-bold text-stone-400 uppercase mb-1.5">Números do Carrinho:</span>
                 <div className="flex flex-wrap gap-1">
                   {numbers.map(num => (
                     <span key={num} className="bg-amber-100 dark:bg-amber-950/40 text-amber-900 dark:text-amber-400 font-mono font-black text-xs px-2 py-0.5 rounded border border-amber-200/50 dark:border-amber-900/50">
@@ -423,10 +423,10 @@ export default function PaymentModal({
                   </div>
 
                   {diaperObservation && (
-                    <div className="flex items-start gap-2.5 p-3.5 bg-yellow-500/10 border border-yellow-500/20 rounded-xl mt-2 text-stone-800 dark:text-yellow-250 animate-fadeIn">
-                      <Info size={16} className="text-amber-500 dark:text-yellow-500 shrink-0 mt-0.5" />
-                      <div className="text-[10px] leading-relaxed font-semibold">
-                        <span className="block text-[8px] tracking-widest uppercase font-black text-amber-600 dark:text-yellow-500 mb-0.5">Nota do Organizador sobre as Fraldas:</span>
+                    <div className="flex items-start gap-2.5 p-3.5 bg-amber-500/10 dark:bg-amber-950/45 border border-amber-500/20 dark:border-amber-900/40 rounded-xl mt-2 text-stone-800 dark:text-amber-100 animate-fadeIn shadow-xs">
+                      <Info size={16} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                      <div className="text-[10.5px] leading-relaxed font-semibold">
+                        <span className="block text-[8.5px] tracking-widest uppercase font-black text-amber-700 dark:text-amber-400 mb-0.5">Nota do Organizador sobre as Fraldas:</span>
                         {diaperObservation}
                       </div>
                     </div>

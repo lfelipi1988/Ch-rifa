@@ -28,23 +28,23 @@ export const THEME_CONFIGS: Record<ThemeType, ThemeConfig> = {
     id: "astronaut",
     name: "Espaço Astronauta",
     fontClass: "font-astronaut tracking-wider",
-    bgClass: "bg-gradient-astronaut text-white pattern-stars min-h-screen font-sans",
-    cardClass: "bg-indigo-950/40 backdrop-blur-md border border-indigo-500/30 shadow-2xl rounded-3xl p-6 text-white",
-    textClass: "text-indigo-100",
-    textMutedClass: "text-indigo-300 text-sm",
-    primaryBtnClass: "bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2.5 rounded-2xl shadow-lg shadow-indigo-600/30 transition-all font-astronaut text-sm text-center cursor-pointer",
-    secondaryBtnClass: "bg-indigo-950/80 hover:bg-indigo-900 text-indigo-200 border border-indigo-700/50 font-medium px-4 py-2.5 rounded-2xl transition-all text-sm text-center cursor-pointer",
-    accentBorderClass: "border-cyan-500/50",
-    accentTextClass: "text-cyan-400 font-bold",
-    accentBgClass: "bg-cyan-550/20",
+    bgClass: "bg-gradient-astronaut text-indigo-950 pattern-stars min-h-screen font-sans",
+    cardClass: "bg-white/80 backdrop-blur-md border border-indigo-150/50 shadow-xl rounded-3xl p-6 text-indigo-950",
+    textClass: "text-indigo-950",
+    textMutedClass: "text-indigo-700/80 text-sm",
+    primaryBtnClass: "bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2.5 rounded-2xl shadow-lg shadow-indigo-600/10 transition-all font-astronaut text-sm text-center cursor-pointer",
+    secondaryBtnClass: "bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 font-medium px-4 py-2.5 rounded-2xl transition-all text-sm text-center cursor-pointer",
+    accentBorderClass: "border-cyan-400/30",
+    accentTextClass: "text-cyan-700 font-bold",
+    accentBgClass: "bg-cyan-50/50",
     gridStatusClasses: {
-      available: "bg-indigo-950/80 border border-indigo-700/50 text-indigo-300 hover:bg-indigo-900/60 hover:scale-105 cursor-pointer",
-      reserved: "bg-yellow-650/30 border border-yellow-500/60 text-yellow-300 pulse-subtle hover:bg-yellow-600/40 hover:scale-105 cursor-pointer",
-      paid: "bg-cyan-500/30 border border-cyan-400 text-cyan-200 shadow-sm shadow-cyan-400/20 cursor-not-allowed"
+      available: "bg-indigo-50/80 border border-indigo-150 text-indigo-700 hover:bg-indigo-100/80 hover:scale-105 cursor-pointer",
+      reserved: "bg-amber-100 border border-amber-300 text-amber-900 pulse-subtle hover:bg-amber-150 hover:scale-105 cursor-pointer",
+      paid: "bg-cyan-100 border border-cyan-300 text-cyan-800 shadow-sm cursor-not-allowed"
     },
     emojis: ["🚀", "👨‍🚀", "🛸", "🪐", "⭐", "🛰️", "👽", "🌙"],
     bannerEmoji: "🚀",
-    illustrationClass: "border-indigo-500/20 bg-indigo-950/20"
+    illustrationClass: "border-indigo-250 bg-indigo-50/40"
   },
   safari: {
     id: "safari",

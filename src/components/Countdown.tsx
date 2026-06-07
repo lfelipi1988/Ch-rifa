@@ -81,10 +81,10 @@ export default function Countdown({ targetDate, theme }: CountdownProps) {
   let titleColorClass = "text-stone-800 dark:text-stone-100";
 
   if (theme.id === "astronaut") {
-    boxBgClass = "bg-indigo-900/90 border border-indigo-500/40 shadow-lg shadow-indigo-950/50";
-    digitColorClass = "text-cyan-400 font-mono font-extrabold text-shadow-sm";
-    labelColorClass = "text-indigo-200 font-bold";
-    titleColorClass = "text-indigo-100 font-bold";
+    boxBgClass = "bg-indigo-50/90 border border-indigo-150 shadow-md shadow-indigo-150/40";
+    digitColorClass = "text-indigo-700 font-serif font-extrabold text-shadow-none";
+    labelColorClass = "text-indigo-500 font-bold";
+    titleColorClass = "text-indigo-950 font-bold";
   } else if (theme.id === "safari") {
     boxBgClass = "bg-emerald-50 border border-emerald-850/20 shadow-xs";
     digitColorClass = "text-emerald-900 font-extrabold";
