@@ -1,0 +1,21 @@
+{
+  "settings": {
+    "title": "Chá Rifa do Teo",
+    "description": "Queridos amigos e familiares, criamos este Chá Rifa para celebrar a chegada do Teo com muito carinho! Escolha seus números da sorte e concorra a prêmios especiais enquanto nos ajuda com as fraldas e enxoval.",
+    "prize": "1º Prêmio: Fritadeira Elétrica AirFryer Philips Walita | 2º Prêmio: Cesta de Chocolates Cacau Show de 1,5kg | 3º Prêmio: Mini Caixa de Som Bluetooth JBL",
+    "theme": "natural",
+    "raffleDate": "2026-07-06T18:00:00",
+    "ticketPrice": 15,
+    "allowDiaper": true,
+    "allowPix": true,
+    "diaperSizes": [
+      "M",
+      "G",
+      "GG"
+    ],
+    "adminKey": "admin123",
+    "numberOfTickets": 100
+  },
+  "tickets": {},
+  "drawnNumbers": []
+}

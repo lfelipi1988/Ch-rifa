@@ -1,0 +1,71 @@
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Orbitron:wght@500;700;900&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Base custom classes to complement Tailwind v4 */
+.font-astronaut {
+  font-family: 'Orbitron', sans-serif;
+}
+
+.font-safari {
+  font-family: 'Fredoka', sans-serif;
+}
+
+.font-floral {
+  font-family: 'Playfair Display', serif;
+}
+
+/* Animations & Transitions */
+.transition-all-custom {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Theme backgrounds and accents */
+.bg-gradient-astronaut {
+  background: radial-gradient(circle at top, #1e1b4b 0%, #03001e 50%, #000000 100%);
+}
+
+.bg-gradient-safari {
+  background: radial-gradient(circle at top, #fcfbf4 0%, #f6ebd0 40%, #e2d1a6 100%);
+}
+
+.bg-gradient-natural {
+  background-color: #F7F3E9;
+}
+
+.bg-gradient-floral {
+  background: radial-gradient(circle at top, #fff5f6 0%, #ffe3e7 50%, #fbc4cb 100%);
+}
+
+/* Cute overlays resembling standard background patterns */
+.pattern-dots {
+  background-image: radial-gradient(#00000010 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.pattern-stars {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.15) 1px, transparent 0),
+                    radial-gradient(rgba(255, 255, 255, 0.2) 2px, transparent 0);
+  background-size: 40px 40px, 80px 80px;
+  background-position: 0 0, 20px 20px;
+}
+
+/* Custom rounded shapes and borders */
+.pulse-subtle {
+  animation: pulse-soft 2.5s infinite ease-in-out;
+}
+
+@keyframes pulse-soft {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.02);
+  }
+}

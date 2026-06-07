@@ -1,0 +1,6 @@
+{
+  "name": "Chá Rifa Online",
+  "description": "Gerenciador completo e em tempo real para Chá Rifa de bebês com temas (Astronauta, Safari, Floral), reserva, escolha de fralda ou Pix, e sorteador integrado.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
