@@ -164,7 +164,7 @@ function getInitialState(): DatabaseState {
       allowDiaper: true,
       allowPix: true,
       diaperSizes: ["RN", "P", "M", "G", "GG", "XG"],
-      adminKey: "admin123", // Easy default key
+      adminKey: process.env.ADMIN_KEY || "admin123", // Easy default key or env-sourced key
       numberOfTickets: 100,
       diaperRanges: [
         { from: 1, to: 15, size: "P" },
@@ -178,6 +178,16 @@ function getInitialState(): DatabaseState {
     tickets: {},
     drawnNumbers: []
   };
+}
+
+// Helper to validate admin keys, supporting database-stored setting and runtime environment override
+function isValidAdminKey(key: any, dbSettingsAdminKey: string): boolean {
+  if (!key) return false;
+  const normalizedKey = String(key).trim();
+  if (normalizedKey === String(dbSettingsAdminKey).trim()) return true;
+  const envKey = process.env.ADMIN_KEY;
+  if (envKey && normalizedKey === String(envKey).trim()) return true;
+  return false;
 }
 
 // Run structure migrations & save if anything changes
@@ -558,7 +568,7 @@ initDbPromise = initDatabase()
           allowPix: db.settings.allowPix,
           diaperSizes: db.settings.diaperSizes,
           numberOfTickets: db.settings.numberOfTickets,
-          isDemoKey: db.settings.adminKey === "admin123",
+          isDemoKey: db.settings.adminKey === "admin123" && (!process.env.ADMIN_KEY || process.env.ADMIN_KEY === "admin123"),
           diaperRanges: db.settings.diaperRanges || [],
           pixQrCode: db.settings.pixQrCode || "",
           whatsappNumber: db.settings.whatsappNumber || "11999999999",
@@ -590,7 +600,7 @@ initDbPromise = initDatabase()
         throw new Error("Estado do banco de dados retornado está vazio ou inválido.");
       }
 
-      if (!key || key !== db.settings.adminKey) {
+      if (!isValidAdminKey(key, db.settings.adminKey)) {
         return res.status(401).json({ error: "Chave de administrador inválida ou não fornecida." });
       }
 
@@ -718,7 +728,7 @@ initDbPromise = initDatabase()
     const key = req.headers["x-admin-key"] || req.query.key;
     const db = await getRaffleState();
 
-    if (!key || key !== db.settings.adminKey) {
+    if (!isValidAdminKey(key, db.settings.adminKey)) {
       return res.status(401).json({ error: "Não autorizado." });
     }
 
@@ -774,7 +784,7 @@ initDbPromise = initDatabase()
     const key = req.headers["x-admin-key"] || req.query.key;
     const db = await getRaffleState();
 
-    if (!key || key !== db.settings.adminKey) {
+    if (!isValidAdminKey(key, db.settings.adminKey)) {
       return res.status(401).json({ error: "Não autorizado." });
     }
 
@@ -811,7 +821,7 @@ initDbPromise = initDatabase()
     const key = req.headers["x-admin-key"] || req.query.key;
     const db = await getRaffleState();
 
-    if (!key || key !== db.settings.adminKey) {
+    if (!isValidAdminKey(key, db.settings.adminKey)) {
       return res.status(401).json({ error: "Não autorizado." });
     }
 
@@ -858,7 +868,7 @@ initDbPromise = initDatabase()
     const key = req.headers["x-admin-key"] || req.query.key;
     const db = await getRaffleState();
 
-    if (!key || key !== db.settings.adminKey) {
+    if (!isValidAdminKey(key, db.settings.adminKey)) {
       return res.status(401).json({ error: "Não autorizado." });
     }
 
@@ -872,7 +882,7 @@ initDbPromise = initDatabase()
     const key = req.headers["x-admin-key"] || req.query.key;
     const db = await getRaffleState();
 
-    if (!key || key !== db.settings.adminKey) {
+    if (!isValidAdminKey(key, db.settings.adminKey)) {
       return res.status(401).json({ error: "Não autorizado." });
     }
 
