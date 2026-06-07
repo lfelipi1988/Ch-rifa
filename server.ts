@@ -18,10 +18,37 @@ const DB_FILE = process.env.VERCEL
   ? path.join("/tmp", "db-rifa.json")
   : path.join(process.cwd(), "db-rifa.json");
 
-// 1. Direct Connection Pool (via DATABASE_URL string)
+// 1. Direct Connection Pool (via DATABASE_URL string) with self-healing circuit breaker
 let dbPool: pg.Pool | null = null;
-let dbPoolDisabled = false;
+let dbPoolLastFailureTime = 0;
+const DB_COOLDOWN_MS = 20000; // Keep disabled for 20 seconds after a connection/query failure to prevent hanging
+let initDbPromise: Promise<void> | null = null;
+
+// Populate initial cachedState in memory from local file on container boot for instant resilience
+let cachedState: DatabaseState | null = (() => {
+  try {
+    const tmpPath = path.join("/tmp", "db-rifa.json");
+    if (fs.existsSync(tmpPath)) {
+      console.log("[Database Init] Semeando cache em memória através de /tmp/db-rifa.json...");
+      return JSON.parse(fs.readFileSync(tmpPath, "utf-8"));
+    }
+    const rootPath = path.join(process.cwd(), "db-rifa.json");
+    if (fs.existsSync(rootPath)) {
+      console.log("[Database Init] Semeando cache em memória através do arquivo de build db-rifa.json...");
+      return JSON.parse(fs.readFileSync(rootPath, "utf-8"));
+    }
+  } catch (e) {
+    console.warn("[Database Init] Falha ao sementeiar cachedState local:", e);
+  }
+  return null;
+})();
+
 const databaseUrl = process.env.DATABASE_URL;
+
+function isDbPoolActive(): boolean {
+  if (!dbPool) return false;
+  return (Date.now() - dbPoolLastFailureTime) > DB_COOLDOWN_MS;
+}
 
 if (databaseUrl) {
   console.log("[Supabase Conn] DATABASE_URL encontrada. Conectando ao PostgreSQL...");
@@ -30,8 +57,16 @@ if (databaseUrl) {
     ssl: {
       rejectUnauthorized: false
     },
-    connectionTimeoutMillis: 1000, // Wait max 1 second to connect
-    query_timeout: 1000,            // Wait max 1 second for queries to respond
+    max: 3,                         // Low connection limit for serverless to prevent exhaustion
+    idleTimeoutMillis: 5000,        // Close idle connections quickly
+    connectionTimeoutMillis: 12000, // Generous 12-second connection timeout to let sleeping dbs wake up
+    query_timeout: 10000,           // Wait max 10 seconds for queries to respond
+  });
+
+  // Handle unexpected errors on idle clients to prevent crashing
+  dbPool.on("error", (err) => {
+    console.warn("[Supabase Conn] Canal de conexão PostgreSQL direta fechado ou indisponível (cooldown ativado):", err.message || err);
+    dbPoolLastFailureTime = Date.now(); // Trigger temporary cooldown on sudden pool errors
   });
 }
 
@@ -53,29 +88,29 @@ if (!databaseUrl && (!supabaseUrl || !supabaseAnonKey)) {
 
 // Automatically create tables on start if using Direct Postgres, or check Connection if using API Client
 async function initDatabase() {
-  if (dbPool && !dbPoolDisabled) {
+  if (isDbPoolActive()) {
     try {
-      await dbPool.query(`
+      await dbPool!.query(`
         CREATE TABLE IF NOT EXISTS raffle_state (
           id INT PRIMARY KEY,
           state TEXT NOT NULL
         );
       `);
       
-      const countRes = await dbPool.query("SELECT COUNT(*) FROM raffle_state WHERE id = 1;");
+      const countRes = await dbPool!.query("SELECT COUNT(*) FROM raffle_state WHERE id = 1;");
       const count = parseInt(countRes.rows[0].count);
       if (count === 0) {
         console.log("[Supabase Conn] Inicializando registro padrão de estado da rifa...");
         const initialState = getInitialState();
-        await dbPool.query(
+        await dbPool!.query(
           "INSERT INTO raffle_state (id, state) VALUES ($1, $2);",
           [1, JSON.stringify(initialState)]
         );
       }
       console.log("[Supabase Conn] Tabelas do banco de dados verificadas e prontas!");
-    } catch (err) {
-      console.error("[Supabase Conn] Erro/Timeout na conexão PostgreSQL direta. Desativando pool...");
-      dbPoolDisabled = true;
+    } catch (err: any) {
+      console.warn("[Supabase Conn] Alerta: Erro/Timeout na conexão PostgreSQL direta durante a inicialização (ativando cooldown temporário e usando canais alternativos):", err.message || err);
+      dbPoolLastFailureTime = Date.now();
     }
   }
   
@@ -88,20 +123,20 @@ async function initDatabase() {
           console.log("[Supabase REST] Tabela 'raffle_state' não encontrada no seu projeto Supabase.");
           console.log("[Supabase REST] Por favor, vá ao SQL Editor no Painel do Supabase e execute o comando de criação da tabela.");
         } else {
-          console.error("[Supabase REST] Erro ao carregar do Supabase REST:", error.message);
+          console.warn("[Supabase REST] Alerta: Erro ao carregar do Supabase REST:", error.message);
         }
       } else if (!data || data.length === 0) {
         console.log("[Supabase REST] Sincronização REST: Inicializando registro padrão de estado no Supabase...");
         const initialState = getInitialState();
         const { error: insertError } = await supabaseClient.from("raffle_state").insert({ id: 1, state: JSON.stringify(initialState) });
         if (insertError) {
-          console.error("[Supabase REST] Erro ao criar registro inicial no Supabase REST:", insertError.message);
+          console.warn("[Supabase REST] Alerta: Erro ao criar registro inicial no Supabase REST:", insertError.message);
         }
       } else {
         console.log("[Supabase REST] Conexão com Supabase via REST bem sucedida!");
       }
     } catch (err) {
-      console.error("[Supabase REST] Falha na inicialização da REST API:", err);
+      console.warn("[Supabase REST] Alerta: Falha na inicialização da REST API:", err);
     }
   }
 }
@@ -214,93 +249,141 @@ async function migrateAndSaveState(db: DatabaseState): Promise<DatabaseState> {
   if (dirty) {
     await saveRaffleState(db);
   }
+  cachedState = db;
   return db;
 }
 
-// Fetch raffle state asynchronously using active backend engine choice
+// Fetch raffle state asynchronously using active backend engine choice with robust failover
 async function getRaffleState(): Promise<DatabaseState> {
-  // Try direct Postgres
-  if (dbPool && !dbPoolDisabled) {
+  // Wait for DB initialization to complete if it's running
+  if (initDbPromise) {
     try {
-      const res = await dbPool.query("SELECT state FROM raffle_state WHERE id = 1;");
+      await initDbPromise;
+    } catch (e: any) {
+      console.warn("[Database] Informação: Falha ao aguardar inicialização do DB durante carregamento (usando cache local/memória se disponível):", e.message || e);
+    }
+  }
+
+  const isCloudMode = !!(databaseUrl || (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY));
+
+  // 1. Try direct Postgres if enabled and active
+  if (isDbPoolActive()) {
+    try {
+      const res = await dbPool!.query("SELECT state FROM raffle_state WHERE id = 1;");
       if (res.rows.length > 0) {
         const db: DatabaseState = JSON.parse(res.rows[0].state);
         return await migrateAndSaveState(db);
       }
-    } catch (err) {
-      console.error("[Supabase Conn] Falha ao ler do SQL. Desativando pool direto de Postgres:", err);
-      dbPoolDisabled = true;
+    } catch (err: any) {
+      console.warn("[Supabase Conn] Alerta: Falha ao ler do SQL. Ativando cooldown de Postgres temporário:", err.message || err);
+      dbPoolLastFailureTime = Date.now();
+      // Fall through to try other backends
     }
   }
-  // Try client-side API
-  else if (supabaseClient) {
+
+  // 2. Try Supabase REST Client
+  if (supabaseClient) {
     try {
       const { data, error } = await supabaseClient.from("raffle_state").select("state").eq("id", 1).single();
       if (error) {
-        console.error("[Supabase REST] Erro ao ler dados via REST:", error.message);
+        console.warn("[Supabase REST] Alerta: Erro ao ler dados via REST:", error.message);
       } else if (data && data.state) {
         const db: DatabaseState = typeof data.state === "string" ? JSON.parse(data.state) : data.state;
         return await migrateAndSaveState(db);
       }
-    } catch (err) {
-      console.error("[Supabase REST] Exception ao ler do REST API:", err);
+    } catch (err: any) {
+      console.warn("[Supabase REST] Alerta: Exception ao ler do REST API:", err.message || err);
     }
   }
 
-  // Fallback to reading database from file system
+  // 3. Fallback to cached memory state (Prevents losing data upon temporary cloud DB outage)
+  if (cachedState) {
+    console.warn("[Database] Usando cópia do estado em cache de memória devido a instabilidade temporária na nuvem.");
+    return cachedState;
+  }
+
+  // 4. Fallback to reading database from file system
   try {
     if (fs.existsSync(DB_FILE)) {
       const data = fs.readFileSync(DB_FILE, "utf-8");
       const db: DatabaseState = JSON.parse(data);
+      cachedState = db;
       return await migrateAndSaveState(db);
     }
-  } catch (error) {
-    console.error("Erro ao ler DB do arquivo, usando estado inicial:", error);
+  } catch (error: any) {
+    console.warn("Informação: Erro ao ler DB do arquivo local:", error.message || error);
+  }
+
+  // If we are in cloud mode and have no cache or file backup, do not return raw initialState
+  // as it would overwrite cloud DB and cause 401 unauthorized due to adminKey reset.
+  if (isCloudMode) {
+    throw new Error("Não foi possível conectar ao banco de dados remoto no momento e nenhuma cópia local/cacheada foi encontrada. Por favor, tente novamente.");
   }
 
   const initialState = getInitialState();
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(initialState, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Erro ao gravar novo arquivo local:", err);
+  } catch (err: any) {
+    console.warn("Informação: Erro ao gravar novo arquivo local:", err.message || err);
   }
+  cachedState = initialState;
   return initialState;
 }
 
-// Persist raffle state asynchronously
+// Persist raffle state asynchronously with fallback pipeline
 async function saveRaffleState(state: DatabaseState): Promise<void> {
-  if (dbPool && !dbPoolDisabled) {
+  // Always update memory cache immediately
+  cachedState = state;
+
+  // Wait for DB initialization to complete if it's running
+  if (initDbPromise) {
     try {
-      await dbPool.query(
+      await initDbPromise;
+    } catch (e: any) {
+      console.warn("[Database] Informação: Falha ao aguardar inicialização do DB antes de salvar:", e.message || e);
+    }
+  }
+
+  let savedSuccessfully = false;
+
+  // 1. Try direct Postgres
+  if (isDbPoolActive()) {
+    try {
+      await dbPool!.query(
         "UPDATE raffle_state SET state = $1 WHERE id = 1;",
         [JSON.stringify(state)]
       );
-      return;
-    } catch (err) {
-      console.error("[Supabase Conn] Falha ao persistir no SQL. Desativando pool direto de Postgres:", err);
-      dbPoolDisabled = true;
+      savedSuccessfully = true;
+    } catch (err: any) {
+      console.warn("[Supabase Conn] Alerta: Falha ao persistir no SQL. Ativando cooldown de Postgres temporário:", err.message || err);
+      dbPoolLastFailureTime = Date.now();
+      // Fall through to try other backends
     }
   }
-  
-  if (supabaseClient) {
+
+  // 2. Try Supabase REST Client
+  if (!savedSuccessfully && supabaseClient) {
     try {
       const { error } = await supabaseClient
         .from("raffle_state")
         .upsert({ id: 1, state: JSON.stringify(state) });
       if (error) {
-        console.error("[Supabase REST] Falha ao salvar via REST API:", error.message);
+        console.warn("[Supabase REST] Alerta: Falha ao salvar via REST API:", error.message);
       } else {
-        return;
+        savedSuccessfully = true;
       }
-    } catch (err) {
-      console.error("[Supabase REST] Exception ao persistir no REST API:", err);
+    } catch (err: any) {
+      console.warn("[Supabase REST] Alerta: Exception ao persistir no REST API:", err.message || err);
     }
   }
 
-  try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(state, null, 2), "utf-8");
-  } catch (error) {
-    console.error("Erro ao salvar DB em arquivo:", error);
+  // 3. Always back up/save to local file system as well for consistency in local environment
+  if (!savedSuccessfully || (!process.env.VERCEL && process.env.NODE_ENV !== "production")) {
+    try {
+      fs.writeFileSync(DB_FILE, JSON.stringify(state, null, 2), "utf-8");
+    } catch (error: any) {
+      console.warn("Informação: Erro ao salvar DB em arquivo local:", error.message || error);
+    }
   }
 }
 
@@ -308,10 +391,11 @@ const app = express();
 app.use(express.json({ limit: "15mb" }));
 app.use(express.urlencoded({ limit: "15mb", extended: true }));
 
-// Lazily kick off DB initialization (non-blocking)
-initDatabase()
-  .then(() => getRaffleState())
-  .catch(err => console.error("[Database] Erro de inicialização:", err));
+// Lazily kick off DB initialization (non-blocking) and save the promise
+initDbPromise = initDatabase()
+  .catch(err => {
+    console.error("[Database] Erro de inicialização:", err);
+  }) as any;
 
 // API ROUTES
 
@@ -335,7 +419,7 @@ initDatabase()
         const start = Date.now();
         const dbRes = await dbPool.query("SELECT NOW();");
         const duration = Date.now() - start;
-        dbPoolDisabled = false; // Reset if it successfully connected!
+        dbPoolLastFailureTime = 0; // Reset cooldown completely if it successfully connected!
         return res.json({
           success: true,
           mode: "supabase",
@@ -343,8 +427,8 @@ initDatabase()
           durationMs: duration
         });
       } catch (err: any) {
-        // If timed out or caught, we disable direct pool
-        dbPoolDisabled = true;
+        // If timed out or caught, we activate direct pool cooldown
+        dbPoolLastFailureTime = Date.now();
         const msg = err.message || String(err);
         const isTimeout = msg.includes("timeout") || msg.includes("ETIMEDOUT");
         

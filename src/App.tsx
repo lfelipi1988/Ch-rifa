@@ -85,10 +85,19 @@ export default function App() {
           setAdminKey(keyToUse);
           setIsLoading(false);
           return;
-        } else {
+        } else if (response.status === 401) {
           // If 401, administrative credentials might have changed, fallback to public mode
           setAdminKey(null);
           setIsAdmin(false);
+        } else {
+          try {
+            const errData = await response.json();
+            setErrorHeader(`Erro de carregamento (Banco de dados): ${errData.error || response.statusText}`);
+          } catch {
+            setErrorHeader(`Instabilidade temporária no servidor (Erro ${response.status}).`);
+          }
+          setIsLoading(false);
+          return;
         }
       }
 
