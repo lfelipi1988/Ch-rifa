@@ -1,11 +1,56 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import pg from "pg";
 import { createServer as createViteServer } from "vite";
 import { DatabaseState, Ticket, RaffleSettings, ThemeType, DiaperSize, PaymentOption } from "./src/types.js";
 
+const { Pool } = pg;
 const PORT = 3000;
 const DB_FILE = path.join(process.cwd(), "db-rifa.json");
+
+// Connect pool if DATABASE_URL configuration is detected (e.g. Supabase)
+let dbPool: pg.Pool | null = null;
+const databaseUrl = process.env.DATABASE_URL;
+
+if (databaseUrl) {
+  console.log("[Supabase Conn] DATABASE_URL encontrada. Conectando ao PostgreSQL...");
+  dbPool = new Pool({
+    connectionString: databaseUrl,
+    ssl: {
+      rejectUnauthorized: false
+    }
+  });
+} else {
+  console.log("[Local Conn] DATABASE_URL não declarada. Usando persistência baseada em arquivo JSON local.");
+}
+
+// Automatically create tables on start if using Postgres
+async function initDatabase() {
+  if (!dbPool) return;
+  try {
+    await dbPool.query(`
+      CREATE TABLE IF NOT EXISTS raffle_state (
+        id INT PRIMARY KEY,
+        state TEXT NOT NULL
+      );
+    `);
+    
+    const countRes = await dbPool.query("SELECT COUNT(*) FROM raffle_state WHERE id = 1;");
+    const count = parseInt(countRes.rows[0].count);
+    if (count === 0) {
+      console.log("[Supabase Conn] Inicializando registro padrão de estado da rifa...");
+      const initialState = getInitialState();
+      await dbPool.query(
+        "INSERT INTO raffle_state (id, state) VALUES ($1, $2);",
+        [1, JSON.stringify(initialState)]
+      );
+    }
+    console.log("[Supabase Conn] Tabelas do banco de dados verificadas e prontas!");
+  } catch (err) {
+    console.error("[Supabase Conn] Erro na criação de tabelas PostgreSQL:", err);
+  }
+}
 
 // Helper to initialize database with default settings
 function getInitialState(): DatabaseState {
@@ -46,13 +91,94 @@ function getInitialState(): DatabaseState {
   };
 }
 
-// Read database from file system
-function readDB(): DatabaseState {
+// Fetch raffle state asynchronously using active backend engine choice
+async function getRaffleState(): Promise<DatabaseState> {
+  if (dbPool) {
+    try {
+      const res = await dbPool.query("SELECT state FROM raffle_state WHERE id = 1;");
+      if (res.rows.length > 0) {
+        const db: DatabaseState = JSON.parse(res.rows[0].state);
+        
+        // Auto-run standard state structure self-repair migrations
+        let dirty = false;
+        if (!db.settings) {
+          return getInitialState();
+        }
+        if (!db.settings.diaperRanges) {
+          db.settings.diaperRanges = [
+            { from: 1, to: 15, size: "P" },
+            { from: 16, to: 45, size: "M" },
+            { from: 46, to: 80, size: "G" },
+            { from: 81, to: 100, size: "GG" }
+          ];
+          dirty = true;
+        }
+        if (!db.settings.prizes) {
+          if (db.settings.prize) {
+            db.settings.prizes = db.settings.prize.split("|").map(p => p.trim()).filter(Boolean);
+          } else {
+            db.settings.prizes = ["1º Prêmio: Fritadeira Elétrica Airfryer Philips Walita"];
+          }
+          dirty = true;
+        }
+        if (!db.settings.pixKey) {
+          db.settings.pixKey = "pix-chafarifa@bancocentral.com.br";
+          db.settings.pixKeyType = "Chave Aleatória";
+          dirty = true;
+        }
+        if (!db.settings.whatsappNumber) {
+          db.settings.whatsappNumber = "11999999999";
+          dirty = true;
+        }
+        if (db.settings.pixCopyAndPaste === undefined) {
+          db.settings.pixCopyAndPaste = "";
+          dirty = true;
+        }
+        if (db.settings.paymentDeadline === undefined) {
+          const defaultDeadline = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0].split('-').reverse().join('/');
+          db.settings.paymentDeadline = defaultDeadline;
+          dirty = true;
+        }
+        if (db.settings.diaperSizes) {
+          const migrated = db.settings.diaperSizes.map(sz => sz === 'XP' as any ? 'RN' : sz) as DiaperSize[];
+          if (JSON.stringify(migrated) !== JSON.stringify(db.settings.diaperSizes)) {
+            db.settings.diaperSizes = migrated;
+            dirty = true;
+          }
+        }
+        if (db.settings.diaperRanges) {
+          db.settings.diaperRanges = db.settings.diaperRanges.map(r => {
+            if (r.size === 'XP' as any) {
+              r.size = 'RN';
+              dirty = true;
+            }
+            return r;
+          });
+        }
+        if (db.tickets) {
+          Object.values(db.tickets).forEach(t => {
+            if (t.diaperSize === 'XP' as any) {
+              t.diaperSize = 'RN';
+              dirty = true;
+            }
+          });
+        }
+
+        if (dirty) {
+          await saveRaffleState(db);
+        }
+        return db;
+      }
+    } catch (err) {
+      console.error("[Supabase Conn] Falha ao ler do SQL. Acionando fallback local temporário:", err);
+    }
+  }
+
   try {
     if (fs.existsSync(DB_FILE)) {
       const data = fs.readFileSync(DB_FILE, "utf-8");
       const db: DatabaseState = JSON.parse(data);
-      // Auto-migrate database with diaperRanges if not present
+      let dirty = false;
       if (!db.settings.diaperRanges) {
         db.settings.diaperRanges = [
           { from: 1, to: 15, size: "P" },
@@ -60,39 +186,34 @@ function readDB(): DatabaseState {
           { from: 46, to: 80, size: "G" },
           { from: 81, to: 100, size: "GG" }
         ];
-        writeDB(db);
+        dirty = true;
       }
-      // Auto-migrate database with prizes if not present
       if (!db.settings.prizes) {
         if (db.settings.prize) {
           db.settings.prizes = db.settings.prize.split("|").map(p => p.trim()).filter(Boolean);
         } else {
           db.settings.prizes = ["1º Prêmio: Fritadeira Elétrica Airfryer Philips Walita"];
         }
-        writeDB(db);
+        dirty = true;
       }
-      // Auto-migrate database with default Pix keys if not present
       if (!db.settings.pixKey) {
         db.settings.pixKey = "pix-chafarifa@bancocentral.com.br";
         db.settings.pixKeyType = "Chave Aleatória";
-        writeDB(db);
+        dirty = true;
       }
       if (!db.settings.whatsappNumber) {
         db.settings.whatsappNumber = "11999999999";
-        writeDB(db);
+        dirty = true;
       }
       if (db.settings.pixCopyAndPaste === undefined) {
         db.settings.pixCopyAndPaste = "";
-        writeDB(db);
+        dirty = true;
       }
       if (db.settings.paymentDeadline === undefined) {
         const defaultDeadline = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0].split('-').reverse().join('/');
         db.settings.paymentDeadline = defaultDeadline;
-        writeDB(db);
+        dirty = true;
       }
-
-      // Auto-migrate XP diaper sizes and range sizes to RN
-      let dirty = false;
       if (db.settings.diaperSizes) {
         const migrated = db.settings.diaperSizes.map(sz => sz === 'XP' as any ? 'RN' : sz) as DiaperSize[];
         if (JSON.stringify(migrated) !== JSON.stringify(db.settings.diaperSizes)) {
@@ -118,25 +239,41 @@ function readDB(): DatabaseState {
         });
       }
       if (dirty) {
-        writeDB(db);
+        fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), "utf-8");
       }
-
       return db;
     }
   } catch (error) {
-    console.error("Erro ao ler DB, usando estado inicial:", error);
+    console.error("Erro ao ler DB do arquivo, usando estado inicial:", error);
   }
+
   const initialState = getInitialState();
-  writeDB(initialState);
+  try {
+    fs.writeFileSync(DB_FILE, JSON.stringify(initialState, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Erro ao gravar novo arquivo local:", err);
+  }
   return initialState;
 }
 
-// Write database to file system
-function writeDB(state: DatabaseState): void {
+// Persist raffle state asynchronously
+async function saveRaffleState(state: DatabaseState): Promise<void> {
+  if (dbPool) {
+    try {
+      await dbPool.query(
+        "UPDATE raffle_state SET state = $1 WHERE id = 1;",
+        [JSON.stringify(state)]
+      );
+      return;
+    } catch (err) {
+      console.error("[Supabase Conn] Falha ao persistir no SQL. Acionando fallback local:", err);
+    }
+  }
+
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(state, null, 2), "utf-8");
   } catch (error) {
-    console.error("Erro ao salvar DB:", error);
+    console.error("Erro ao salvar DB em arquivo:", error);
   }
 }
 
@@ -146,13 +283,52 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "15mb", extended: true }));
 
   // Initialize DB on server start
-  readDB();
+  await initDatabase();
+  await getRaffleState();
 
   // API ROUTES
 
+  // Test Database Connection (Supabase / Postgres)
+  app.get("/api/raffle/db-test", async (req, res) => {
+    const databaseUrl = process.env.DATABASE_URL;
+    if (!databaseUrl) {
+      return res.json({
+        success: false,
+        mode: "local",
+        message: "Variável DATABASE_URL não declarada nas variáveis de ambiente. O sistema está usando armazenamento JSON local (.json)."
+      });
+    }
+
+    if (!dbPool) {
+      return res.json({
+        success: false,
+        mode: "supabase",
+        message: "O pool de conexão PostgreSQL/Supabase não pôde ser iniciado. Verifique o formato da URL."
+      });
+    }
+
+    try {
+      const start = Date.now();
+      const dbRes = await dbPool.query("SELECT NOW();");
+      const duration = Date.now() - start;
+      return res.json({
+        success: true,
+        mode: "supabase",
+        message: `Conexão bem sucedida com o Supabase! Retornou: ${dbRes.rows[0].now}`,
+        durationMs: duration
+      });
+    } catch (err: any) {
+      return res.json({
+        success: false,
+        mode: "supabase",
+        message: `Erro ao conectar e executar query no Supabase: ${err.message || err}`
+      });
+    }
+  });
+
   // Get public raffle info: filters out PII (phones and email profiles)
-  app.get("/api/raffle", (req, res) => {
-    const db = readDB();
+  app.get("/api/raffle", async (req, res) => {
+    const db = await getRaffleState();
     
     // Mask tickets phone numbers for public consumption
     const maskedTickets: Record<number, Omit<Ticket, "phone">> = {};
@@ -200,9 +376,9 @@ async function startServer() {
   });
 
   // Verify Admin Key and return full state (with PII)
-  app.get("/api/raffle/admin", (req, res) => {
+  app.get("/api/raffle/admin", async (req, res) => {
     const key = req.headers["x-admin-key"] || req.query.key;
-    const db = readDB();
+    const db = await getRaffleState();
 
     if (!key || key !== db.settings.adminKey) {
       return res.status(401).json({ error: "Chave de administrador inválida ou não fornecida." });
@@ -212,7 +388,7 @@ async function startServer() {
   });
 
   // Reserve a number or multiple numbers
-  app.post("/api/raffle/reserve", (req, res) => {
+  app.post("/api/raffle/reserve", async (req, res) => {
     const { number, numbers, name, phone, option, diaperSize, diaperSizesMap } = req.body;
     
     if (!name || !phone || !option) {
@@ -230,7 +406,7 @@ async function startServer() {
       return res.status(400).json({ error: "Nenhum número de rifa foi selecionado para reserva." });
     }
 
-    const db = readDB();
+    const db = await getRaffleState();
 
     // Check if numbers exceed limits and availability
     for (const n of nums) {
@@ -282,7 +458,7 @@ async function startServer() {
       reservedTickets.push(newTicket);
     });
 
-    writeDB(db);
+    await saveRaffleState(db);
 
     res.status(201).json({
       message: nums.length > 1 ? "Prontinho! Reservas realizadas com sucesso!" : "Reserva realizada com sucesso!",
@@ -293,13 +469,13 @@ async function startServer() {
   });
 
   // Client triggers payment simulation
-  app.post("/api/raffle/pix-confirm", (req, res) => {
+  app.post("/api/raffle/pix-confirm", async (req, res) => {
     const { txid } = req.body;
     if (!txid) {
       return res.status(400).json({ error: "Identificador de transação Pix (txid) é obrigatório." });
     }
 
-    const db = readDB();
+    const db = await getRaffleState();
     let updated = false;
 
     Object.keys(db.tickets).forEach((num) => {
@@ -315,14 +491,14 @@ async function startServer() {
       return res.status(404).json({ error: "Transação Pix pendente não encontrada." });
     }
 
-    writeDB(db);
+    await saveRaffleState(db);
     res.json({ message: "Pagamento Pix simulado e confirmado com sucesso!" });
   });
 
   // Admin: Update settings
-  app.post("/api/raffle/admin/settings", (req, res) => {
+  app.post("/api/raffle/admin/settings", async (req, res) => {
     const key = req.headers["x-admin-key"] || req.query.key;
-    const db = readDB();
+    const db = await getRaffleState();
 
     if (!key || key !== db.settings.adminKey) {
       return res.status(401).json({ error: "Não autorizado." });
@@ -371,14 +547,14 @@ async function startServer() {
       }
     }
 
-    writeDB(db);
+    await saveRaffleState(db);
     res.json({ message: "Configurações atualizadas!", settings: db.settings });
   });
 
   // Admin: Control ticket details / status (Set status to 'paid', 'reserved', or delete/delete releases to 'available')
-  app.post("/api/raffle/admin/ticket/status", (req, res) => {
+  app.post("/api/raffle/admin/ticket/status", async (req, res) => {
     const key = req.headers["x-admin-key"] || req.query.key;
-    const db = readDB();
+    const db = await getRaffleState();
 
     if (!key || key !== db.settings.adminKey) {
       return res.status(401).json({ error: "Não autorizado." });
@@ -408,14 +584,14 @@ async function startServer() {
       db.tickets[n] = existing;
     }
 
-    writeDB(db);
+    await saveRaffleState(db);
     res.json({ message: `Bilhete ${n} atualizado para o status ${status || 'disponível'}`, tickets: db.tickets });
   });
 
   // Admin: Perform Draw
-  app.post("/api/raffle/admin/draw", (req, res) => {
+  app.post("/api/raffle/admin/draw", async (req, res) => {
     const key = req.headers["x-admin-key"] || req.query.key;
-    const db = readDB();
+    const db = await getRaffleState();
 
     if (!key || key !== db.settings.adminKey) {
       return res.status(401).json({ error: "Não autorizado." });
@@ -450,7 +626,7 @@ async function startServer() {
     const winningNumber = pool[winnerIndex];
 
     db.drawnNumbers.push(winningNumber);
-    writeDB(db);
+    await saveRaffleState(db);
 
     res.json({ 
       message: "Sorteio realizado com sucesso!",
@@ -460,23 +636,23 @@ async function startServer() {
   });
 
   // Admin: Clear Drawn List
-  app.post("/api/raffle/admin/clear-draw", (req, res) => {
+  app.post("/api/raffle/admin/clear-draw", async (req, res) => {
     const key = req.headers["x-admin-key"] || req.query.key;
-    const db = readDB();
+    const db = await getRaffleState();
 
     if (!key || key !== db.settings.adminKey) {
       return res.status(401).json({ error: "Não autorizado." });
     }
 
     db.drawnNumbers = [];
-    writeDB(db);
+    await saveRaffleState(db);
     res.json({ message: "Histórico de sorteio limpo!", drawnNumbers: [] });
   });
 
   // Admin: Reset database to clean settings slate
-  app.post("/api/raffle/admin/reset", (req, res) => {
+  app.post("/api/raffle/admin/reset", async (req, res) => {
     const key = req.headers["x-admin-key"] || req.query.key;
-    const db = readDB();
+    const db = await getRaffleState();
 
     if (!key || key !== db.settings.adminKey) {
       return res.status(401).json({ error: "Não autorizado." });
@@ -491,7 +667,7 @@ async function startServer() {
       drawnNumbers: []
     };
 
-    writeDB(clearedDb);
+    await saveRaffleState(clearedDb);
     res.json({ message: "Banco de rifas reiniciado com sucesso!", db: clearedDb });
   });
 

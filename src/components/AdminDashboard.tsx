@@ -6,7 +6,8 @@ import {
 import { 
   Settings2, Users, Receipt, Calendar, ShieldCheck, Share2, 
   Check, Trash2, Edit, Save, Plus, AlertCircle, Sparkles, 
-  Coins, Gift, HelpCircle, Laptop, RotateCcw, Copy, Ticket as TicketIcon, Search, Eye, Upload
+  Coins, Gift, HelpCircle, Laptop, RotateCcw, Copy, Ticket as TicketIcon, Search, Eye, Upload,
+  Database, RefreshCw
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -100,6 +101,37 @@ export default function AdminDashboard({
   const [copiedLink, setCopiedLink] = useState(false);
   const [adminError, setAdminError] = useState<string | null>(null);
   const [adminSuccess, setAdminSuccess] = useState<string | null>(null);
+
+  // Connection testing state
+  const [dbTestResult, setDbTestResult] = useState<{
+    loading: boolean;
+    success?: boolean;
+    mode?: 'supabase' | 'local';
+    message?: string;
+    durationMs?: number;
+  } | null>(null);
+
+  const handleTestDbConnection = async () => {
+    setDbTestResult({ loading: true });
+    try {
+      const res = await fetch('/api/raffle/db-test');
+      const data = await res.json();
+      setDbTestResult({
+        loading: false,
+        success: data.success,
+        mode: data.mode,
+        message: data.message,
+        durationMs: data.durationMs
+      });
+    } catch {
+      setDbTestResult({
+        loading: false,
+        success: false,
+        mode: 'local',
+        message: 'Falha na requisição local da API de teste.'
+      });
+    }
+  };
 
   // Generate unique shareable Admin Link
   const getAdminLink = () => {
@@ -1472,6 +1504,64 @@ export default function AdminDashboard({
                   </div>
                 </div>
                 <p className="text-[9px] text-stone-400">A chave compõe o endereço secreto. Se alterar a chave, o link de administração mudará também!</p>
+              </div>
+
+              {/* Database connection details & tester */}
+              <div className="bg-stone-50 dark:bg-stone-950 p-4 rounded-3xl border border-stone-200 dark:border-stone-800 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Database size={14} className="text-stone-500 dark:text-stone-400" />
+                  <span className="block text-[10px] font-bold text-stone-700 dark:text-stone-300 uppercase tracking-wide">Integração do Banco de Dados</span>
+                </div>
+                
+                <p className="text-[10px] text-stone-500">
+                  Esta aplicação suporta persistência local baseada em arquivo <strong className="text-stone-600 dark:text-stone-400">JSON</strong> e sincronização robusta em nuvem via <strong className="text-stone-600 dark:text-stone-400">Supabase (PostgreSQL)</strong>.
+                </p>
+
+                <button
+                  id="test-database-connection-btn"
+                  type="button"
+                  onClick={handleTestDbConnection}
+                  disabled={dbTestResult?.loading}
+                  className="w-full flex items-center justify-center gap-1.5 py-2 px-4 bg-stone-900 border border-stone-850 hover:bg-stone-800 dark:bg-stone-900 dark:hover:bg-stone-850 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm relative overflow-hidden"
+                >
+                  <RefreshCw size={12} className={dbTestResult?.loading ? "animate-spin" : ""} />
+                  {dbTestResult?.loading ? "Verificando conexão..." : "Testar Conexão Supabase"}
+                </button>
+
+                {dbTestResult && !dbTestResult.loading && (
+                  <div className={`p-3 rounded-xl border text-[10px] space-y-1.5 animate-fadeIn ${
+                    dbTestResult.success 
+                      ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-800 dark:text-emerald-300' 
+                      : dbTestResult.mode === 'local'
+                        ? 'bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-350'
+                        : 'bg-red-500/10 border-red-500/20 text-red-700 dark:text-red-450'
+                  }`}>
+                    <div className="flex items-center justify-between font-bold">
+                      <span className="uppercase tracking-wider text-[8px] font-black">
+                        Modo Atual: {dbTestResult.mode === 'supabase' ? '☁️ SUPABASE (Postgres)' : '📁 JSON LOCAL'}
+                      </span>
+                      {dbTestResult.durationMs !== undefined && (
+                        <span className="font-mono text-[8px] opacity-70">Ping: {dbTestResult.durationMs}ms</span>
+                      )}
+                    </div>
+                    <p className="font-semibold leading-relaxed font-sans">{dbTestResult.message}</p>
+                    {dbTestResult.success && (
+                      <div className="text-[9px] text-emerald-600 dark:text-emerald-400 font-medium">
+                        ✓ Suas tabelas e estruturas padrão estão criadas e respondendo perfeitamente nos servidores do Supabase. Todos os bilhetes e prêmios são guardados com segurança máxima!
+                      </div>
+                    )}
+                    {!dbTestResult.success && dbTestResult.mode === 'local' && (
+                      <div className="text-[9px] text-amber-600 dark:text-amber-400 font-medium space-y-1">
+                        <p>💡 Para conectar com seu banco de dados Supabase e ter persistência definitiva:</p>
+                        <ol className="list-decimal list-inside space-y-0.5">
+                          <li>Crie um projeto gratuito no site do Supabase.</li>
+                          <li>Vá nas configurações e obtenha a <strong className="font-bold">URI de conexão direta</strong> (PostgreSQL).</li>
+                          <li>Insira-a na variável <strong className="font-mono bg-amber-500/10 px-1 py-0.5 rounded">DATABASE_URL</strong> na aba de Configurações deste Workspace.</li>
+                        </ol>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
             </div>
