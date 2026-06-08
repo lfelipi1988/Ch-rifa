@@ -58,9 +58,9 @@ if (databaseUrl) {
       rejectUnauthorized: false
     },
     max: 3,                         // Low connection limit for serverless to prevent exhaustion
-    idleTimeoutMillis: 5000,        // Close idle connections quickly
-    connectionTimeoutMillis: 12000, // Generous 12-second connection timeout to let sleeping dbs wake up
-    query_timeout: 10000,           // Wait max 10 seconds for queries to respond
+    idleTimeoutMillis: 3000,        // Close idle connections quickly
+    connectionTimeoutMillis: 3000,  // Fast 3-second connection timeout to let sleeping dbs wake up
+    query_timeout: 4000,            // Wait max 4 seconds for queries to respond to avoid Vercel 504s
   });
 
   // Handle unexpected errors on idle clients to prevent crashing
@@ -360,12 +360,12 @@ async function saveRaffleState(state: DatabaseState): Promise<void> {
   if (isDbPoolActive()) {
     try {
       await dbPool!.query(
-        "UPDATE raffle_state SET state = $1 WHERE id = 1;",
+        "INSERT INTO raffle_state (id, state) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state;",
         [JSON.stringify(state)]
       );
       savedSuccessfully = true;
     } catch (err: any) {
-      console.warn("[Supabase Conn] Alerta: Falha ao persistir no SQL. Ativando cooldown de Postgres temporário:", err.message || err);
+      console.warn("[Supabase Conn] Alerta: Falha ao persistir no SQL com UPSERT. Ativando cooldown de Postgres temporário:", err.message || err);
       dbPoolLastFailureTime = Date.now();
       // Fall through to try other backends
     }
@@ -409,7 +409,7 @@ initDbPromise = initDatabase()
 
 // API ROUTES
 
-  // Test Database Connection (Supabase / Postgres / REST API)
+  // Test Database Connection (Supabase / Postgres / REST API + Read-Write Test + RLS check)
   app.get("/api/raffle/db-test", async (req, res) => {
     const databaseUrl = process.env.DATABASE_URL;
     const url = process.env.SUPABASE_URL;
@@ -423,104 +423,143 @@ initDbPromise = initDatabase()
       });
     }
 
-    // Direct Postgres
+    const report: any = {
+      success: false,
+      mode: "local",
+      postgresDirect: { active: false, success: false, readOnly: false, error: null },
+      supabaseRest: { active: false, success: false, readOnly: false, error: null, rlsBlocked: false }
+    };
+
+    // Direct Postgres Test
     if (databaseUrl && dbPool) {
+      report.postgresDirect.active = true;
       try {
         const start = Date.now();
-        const dbRes = await dbPool.query("SELECT NOW();");
-        const duration = Date.now() - start;
-        dbPoolLastFailureTime = 0; // Reset cooldown completely if it successfully connected!
-        return res.json({
-          success: true,
-          mode: "supabase",
-          message: `Conexão bem sucedida (via PostgreSQL direto)! Servidor respondeu: ${dbRes.rows[0].now}`,
-          durationMs: duration
-        });
-      } catch (err: any) {
-        // If timed out or caught, we activate direct pool cooldown
-        dbPoolLastFailureTime = Date.now();
-        const msg = err.message || String(err);
-        const isTimeout = msg.includes("timeout") || msg.includes("ETIMEDOUT");
+        // 1. Read Test
+        const dbRes = await dbPool.query("SELECT state FROM raffle_state WHERE id = 1;");
+        report.postgresDirect.durationMs = Date.now() - start;
+        dbPoolLastFailureTime = 0; // reset cooldown override!
+
+        const currentStateStr = dbRes.rows.length > 0 ? dbRes.rows[0].state : JSON.stringify(getInitialState());
         
-        // Since direct connection failed, we fall back to check if Supabase Client is working instead
-        if (supabaseClient) {
-          try {
-            const startRest = Date.now();
-            const { error: restError } = await supabaseClient.from("raffle_state").select("state").eq("id", 1);
-            const durationRest = Date.now() - startRest;
-            if (!restError) {
-              return res.json({
-                success: true,
-                mode: "supabase",
-                message: `O acesso direto via PostgreSQL (porta 5432) falhou por timeout, porém a sua API REST do Supabase (porta 443) foi testada e está FUNCIONANDO PERFEITAMENTE! O sistema usará este canal seguro para salvar os bilhetes.`,
-                durationMs: durationRest
-              });
-            } else if (restError.code === "PGRST116" || restError.message?.includes("does not exist")) {
-              return res.json({
-                success: false,
-                mode: "supabase_rest_needs_table",
-                message: `O banco está respondendo na API REST do Supabase, mas a tabela 'raffle_state' ainda não foi criada. Por favor, crie-a no painel do Supabase. (Erro original do Postgres direto: ${msg})`,
-                durationMs: durationRest
-              });
-            }
-          } catch (restErr: any) {
-            // fall through
-          }
+        // 2. Write Test (Upsert ON CONFLICT)
+        try {
+          await dbPool.query(
+            "INSERT INTO raffle_state (id, state) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state;",
+            [currentStateStr]
+          );
+          report.postgresDirect.success = true;
+          report.success = true;
+          report.mode = "supabase";
+          report.message = "Conexão direta PostgreSQL (porta 5432) funcionando 100% para Leitura e Escrita!";
+          report.durationMs = report.postgresDirect.durationMs;
+        } catch (writeErr: any) {
+          report.postgresDirect.readOnly = true;
+          report.postgresDirect.error = `Erro ao salvar/escrever no Postgres: ${writeErr.message || writeErr}`;
         }
-        
-        return res.json({
-          success: false,
-          mode: "supabase",
-          message: `Conexão direta ao banco PostgreSQL falhou: ${msg}. ${
-            isTimeout ? "Nota: conexões diretas na porta 5432 estão bloqueadas no Sandbox. Use as credenciais SUPABASE_URL e SUPABASE_ANON_KEY para usar a conexão HTTP na porta de navegação comum (443)!" : ""
-          }`
-        });
+      } catch (err: any) {
+        dbPoolLastFailureTime = Date.now(); // activate cooldown
+        report.postgresDirect.error = err.message || String(err);
       }
     }
 
-    // Client-side API
+    // HTTP Rest API Test
     if (supabaseClient) {
+      report.supabaseRest.active = true;
       try {
         const start = Date.now();
-        const { data, error } = await supabaseClient.from("raffle_state").select("state").eq("id", 1);
-        const duration = Date.now() - start;
+        // 1. Read Test
+        const { data, error: readError } = await supabaseClient.from("raffle_state").select("state").eq("id", 1);
+        report.supabaseRest.durationMs = Date.now() - start;
 
-        if (error) {
-          if (error.code === "PGRST116" || error.message?.includes("does not exist")) {
-            return res.json({
-              success: false,
-              mode: "supabase_rest_needs_table",
-              message: "Conectado com o Supabase! Porém, a tabela 'raffle_state' de persistência não existe. Você precisa criá-la no editor SQL do Supabase.",
-              durationMs: duration
-            });
+        if (readError) {
+          if (readError.code === "PGRST116" || readError.message?.includes("does not exist")) {
+            report.supabaseRest.error = "A tabela 'raffle_state' não existe no banco de dados.";
+            report.supabaseRest.needsTable = true;
+          } else {
+            report.supabaseRest.error = `Erro de leitura via REST API: ${readError.message}`;
+            if (readError.message?.includes("row-level security") || readError.code === "42501") {
+              report.supabaseRest.rlsBlocked = true;
+            }
           }
-          return res.json({
-            success: false,
-            mode: "supabase_rest_error",
-            message: `Erro ao fazer requisição REST ao Supabase: ${error.message} (Código ${error.code})`,
-            durationMs: duration
-          });
-        }
+        } else {
+          // Select succeeded. Let's do a write check too- Postgres RLS can sometimes allow select but block writes,
+          // or sometimes it blocks selects of rows created by other roles.
+          const currentStateStr = (data && data.length > 0) ? (data[0].state) : JSON.stringify(getInitialState());
+          const currentStateObj = typeof currentStateStr === "string" ? JSON.parse(currentStateStr) : currentStateStr;
 
-        return res.json({
-          success: true,
-          mode: "supabase",
-          message: "Conexão via REST API do Supabase funcionando perfeitamente! Os dados estão sendo sincronizados com sucesso.",
-          durationMs: duration
-        });
+          // 2. Write Test (Upsert)
+          const { error: writeError } = await supabaseClient
+            .from("raffle_state")
+            .upsert({ id: 1, state: JSON.stringify(currentStateObj) });
+
+          if (writeError) {
+            report.supabaseRest.error = `Leitura OK, mas Escrita FRACASSOU via REST: ${writeError.message}`;
+            report.supabaseRest.readOnly = true;
+            if (writeError.message?.includes("row-level security") || writeError.code === "42501") {
+              report.supabaseRest.rlsBlocked = true;
+            }
+          } else {
+            report.supabaseRest.success = true;
+            if (!report.success) {
+              report.success = true;
+              report.mode = "supabase";
+              report.message = "Conexão via REST API do Supabase funcionando perfeitamente (Leitura e Escrita confirmadas)!";
+              report.durationMs = report.supabaseRest.durationMs;
+            }
+          }
+        }
       } catch (err: any) {
-        return res.json({
-          success: false,
-          mode: "supabase_rest_error",
-          message: `Exception ao testar conexão Supabase REST: ${err.message || err}`
-        });
+        report.supabaseRest.error = `Exception na REST API: ${err.message || err}`;
       }
+    }
+
+    // pin-point precise diagnosis:
+    if (report.success) {
+      return res.json({
+        success: true,
+        mode: report.mode,
+        message: report.message,
+        durationMs: report.durationMs
+      });
+    }
+
+    if (report.supabaseRest.needsTable) {
+      return res.json({
+        success: false,
+        mode: "supabase_rest_needs_table",
+        message: "Conectado com o Supabase! Porém, a tabela 'raffle_state' de persistência não existe. Você precisa criá-la no editor SQL do Supabase."
+      });
+    }
+
+    if (report.supabaseRest.rlsBlocked) {
+      return res.json({
+        success: false,
+        mode: "supabase_rest_needs_table", // Triggers SQL copy card on UI
+        message: "Detectamos que as políticas de segurança de linha (RLS) estão ATIVADAS no seu Supabase e bloqueando as gravações de bilhetes e configurações! Por favor, execute o comando de liberação abaixo no SQL Editor do Supabase."
+      });
+    }
+
+    if (report.supabaseRest.active && report.supabaseRest.error) {
+      return res.json({
+        success: false,
+        mode: "supabase_rest_error",
+        message: `Falha na sincronização REST do Supabase: ${report.supabaseRest.error}. Certifique-se de que a tabela 'raffle_state' foi criada e está com RLS desativado.`
+      });
+    }
+
+    if (report.postgresDirect.active && report.postgresDirect.error) {
+      return res.json({
+        success: false,
+        mode: "local",
+        message: `Falha ao tentar se conectar ao PostgreSQL direto (porta 5432): ${report.postgresDirect.error}. Usando fallback local temporário.`
+      });
     }
 
     return res.json({
       success: false,
       mode: "local",
-      message: "Credenciais de API declaradas mas cliente incorreto ou inicialização falhou."
+      message: "Nenhum dos canais de nuvem do Supabase pôde se comunicar no momento. Seus dados estão salvos no JSON Local temporário."
     });
   });
 

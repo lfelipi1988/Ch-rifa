@@ -7,7 +7,7 @@ import {
   Settings2, Users, Receipt, Calendar, ShieldCheck, Share2, 
   Check, Trash2, Edit, Save, Plus, AlertCircle, Sparkles, 
   Coins, Gift, HelpCircle, Laptop, RotateCcw, Copy, Ticket as TicketIcon, Search, Eye, Upload,
-  Database, RefreshCw
+  Database, RefreshCw, Download
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -143,6 +143,61 @@ export default function AdminDashboard({
     navigator.clipboard.writeText(getAdminLink());
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  // Export reserved or paid tickets to CSV
+  const handleExportCSV = () => {
+    const listToExport = Object.values(tickets)
+      .filter(t => t.status === 'reserved' || t.status === 'paid')
+      .sort((a, b) => a.number - b.number);
+
+    if (listToExport.length === 0) {
+      alert("Nenhum bilhete reservado ou confirmado para exportar.");
+      return;
+    }
+
+    // CSV Headers
+    const headers = ["Número Reservado", "Nome", "Telefone", "Presente Escolhido", "Status"];
+    
+    // Rows
+    const rows = listToExport.map(t => {
+      const numberStr = String(t.number).padStart(2, '0');
+      const nameStr = t.name || "";
+      const phoneStr = t.phone || "";
+      
+      let presentStr = "";
+      if (t.option === 'diaper') {
+        presentStr = `Fralda ${t.diaperSize || ""}`;
+      } else {
+        presentStr = `Pix (R$ ${settings.ticketPrice.toFixed(2)})`;
+      }
+      
+      const statusStr = t.status === 'paid' ? "Confirmado" : "Reservado";
+      
+      const escape = (str: string) => `"${str.replace(/"/g, '""')}"`;
+      
+      return [
+        escape(numberStr),
+        escape(nameStr),
+        escape(phoneStr),
+        escape(presentStr),
+        escape(statusStr)
+      ].join(";");
+    });
+
+    const csvContent = "\uFEFF" + [headers.join(";"), ...rows].join("\r\n");
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    
+    const dateStr = new Date().toISOString().split('T')[0];
+    link.setAttribute("href", url);
+    link.setAttribute("download", `participantes-rifa-${dateStr}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   // Toggle diaper sizes in array
@@ -584,7 +639,7 @@ export default function AdminDashboard({
           <div className="lg:col-span-8 space-y-4">
             
             {/* Filter Search Header */}
-            <div className="flex items-center justify-between gap-3 p-4 bg-white dark:bg-stone-900 border border-stone-150 dark:border-stone-800 rounded-2xl shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 bg-white dark:bg-stone-900 border border-stone-150 dark:border-stone-800 rounded-2xl shadow-sm">
               <div className="relative w-full max-w-xs">
                 <Search className="absolute left-3 top-2.5 text-stone-400" size={14} />
                 <input
@@ -596,9 +651,20 @@ export default function AdminDashboard({
                   className="w-full pl-9 pr-3 py-1.5 bg-stone-50 dark:bg-stone-950 border border-stone-200 dark:border-stone-800 text-xs rounded-xl focus:ring-1 focus:ring-yellow-500 text-stone-900 dark:text-white"
                 />
               </div>
-              <p className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider">
-                Mostrando {filteredTickets.length} de {soldTicketsList.length} compras
-              </p>
+              <div className="flex items-center gap-3 self-end sm:self-auto">
+                <button
+                  id="btn-export-csv"
+                  onClick={handleExportCSV}
+                  type="button"
+                  className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-1.5 px-3 rounded-xl cursor-pointer shadow-sm border border-emerald-600 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <Download size={13} />
+                  <span>Exportar CSV</span>
+                </button>
+                <p className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider">
+                  Mostrando {filteredTickets.length} de {soldTicketsList.length} compras
+                </p>
+              </div>
             </div>
 
             {/* Main participants table */}
