@@ -415,6 +415,11 @@ export default function AdminDashboard({
       return;
     }
 
+    if (!manualPhone.trim()) {
+      setAdminError("Por favor informe o telefone do participante.");
+      return;
+    }
+
     setSavingManual(true);
 
     try {
@@ -424,7 +429,7 @@ export default function AdminDashboard({
         body: JSON.stringify({
           number: Number(manualNumber),
           name: manualName,
-          phone: manualPhone || "Sem Telefone",
+          phone: manualPhone.trim(),
           option: manualOption,
           diaperSize: manualOption === 'diaper' ? manualDiaperSize : undefined
         })
@@ -813,10 +818,11 @@ export default function AdminDashboard({
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-stone-450 uppercase mb-1">Telefone (opcional):</label>
+                  <label className="block text-[10px] font-bold text-stone-450 uppercase mb-1">Telefone (obrigatório):</label>
                   <input
                     id="manual-ticket-phone"
                     type="text"
+                    required
                     placeholder="Ex: (11) 99999-9999"
                     value={manualPhone}
                     onChange={(e) => setManualPhone(e.target.value)}
