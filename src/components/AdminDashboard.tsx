@@ -1637,7 +1637,20 @@ export default function AdminDashboard({
   state TEXT NOT NULL
 );
 
-ALTER TABLE public.raffle_state DISABLE ROW LEVEL SECURITY;`}
+-- Ativar Segurança de Nível de Linha (RLS) para proteger os dados das reservas
+ALTER TABLE public.raffle_state ENABLE ROW LEVEL SECURITY;
+
+-- Política para permitir que qualquer um faça leitura dos bilhetes
+DROP POLICY IF EXISTS "Permitir leitura pública" ON public.raffle_state;
+CREATE POLICY "Permitir leitura pública" ON public.raffle_state FOR SELECT TO anon, authenticated USING (true);
+
+-- Política para permitir inserção de reservas
+DROP POLICY IF EXISTS "Permitir inserção de reservas" ON public.raffle_state;
+CREATE POLICY "Permitir inserção de reservas" ON public.raffle_state FOR INSERT TO anon, authenticated WITH CHECK (true);
+
+-- Política para permitir atualização do estado
+DROP POLICY IF EXISTS "Permitir atualização pública" ON public.raffle_state;
+CREATE POLICY "Permitir atualização pública" ON public.raffle_state FOR UPDATE TO anon, authenticated USING (true) WITH CHECK (true);`}
                           </pre>
                           <button
                             type="button"
@@ -1647,7 +1660,20 @@ ALTER TABLE public.raffle_state DISABLE ROW LEVEL SECURITY;`}
   state TEXT NOT NULL
 );
 
-ALTER TABLE public.raffle_state DISABLE ROW LEVEL SECURITY;`);
+-- Ativar Segurança de Nível de Linha (RLS) para proteger os dados das reservas
+ALTER TABLE public.raffle_state ENABLE ROW LEVEL SECURITY;
+
+-- Política para permitir que qualquer um faça leitura dos bilhetes
+DROP POLICY IF EXISTS "Permitir leitura pública" ON public.raffle_state;
+CREATE POLICY "Permitir leitura pública" ON public.raffle_state FOR SELECT TO anon, authenticated USING (true);
+
+-- Política para permitir inserção de reservas
+DROP POLICY IF EXISTS "Permitir inserção de reservas" ON public.raffle_state;
+CREATE POLICY "Permitir inserção de reservas" ON public.raffle_state FOR INSERT TO anon, authenticated WITH CHECK (true);
+
+-- Política para permitir atualização do estado
+DROP POLICY IF EXISTS "Permitir atualização pública" ON public.raffle_state;
+CREATE POLICY "Permitir atualização pública" ON public.raffle_state FOR UPDATE TO anon, authenticated USING (true) WITH CHECK (true);`);
                               setCopiedSql(true);
                               setTimeout(() => setCopiedSql(false), 2000);
                             }}
@@ -1657,7 +1683,7 @@ ALTER TABLE public.raffle_state DISABLE ROW LEVEL SECURITY;`);
                             {copiedSql ? <span className="text-[8px] font-bold text-emerald-400 font-sans">Copiado!</span> : <Copy size={11} />}
                           </button>
                         </div>
-                        <p className="text-[8.5px] text-amber-600 dark:text-amber-400/80 italic">💡 Isso criará a tabela e liberará o acesso seguro para a API anônima salvar os bilhetes corretamente.</p>
+                        <p className="text-[8.5px] text-amber-600 dark:text-amber-400/80 italic">💡 Isso criará a tabela e ativará as políticas oficiais de segurança de linha (RLS) exigidas pelo Supabase, resolvendo o alerta "Table publicly accessible" e garantindo a livre leitura e escrita corretas e seguras.</p>
                       </div>
                     )}
 

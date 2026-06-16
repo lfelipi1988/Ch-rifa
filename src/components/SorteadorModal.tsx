@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ThemeConfig } from '../themeHelper.js';
 import { Ticket, RaffleSettings } from '../types.js';
-import { Shield, Sparkles, Trophy, Award, Trash2, X, Play, Loader2 } from 'lucide-react';
+import { Shield, Sparkles, Trophy, Award, Trash2, X, Play, Loader2, MessageSquare } from 'lucide-react';
 
 interface SorteadorModalProps {
   isOpen: boolean;
@@ -294,7 +294,7 @@ export default function SorteadorModal({
                   <Award size={12} /> Bilhete Sorteado!
                 </div>
                 {winnerTicket ? (
-                  <div id="sorteador-winner-card" className="space-y-1">
+                  <div id="sorteador-winner-card" className="space-y-2">
                     <p className="text-base font-bold text-stone-800 dark:text-stone-100">{winnerTicket.name}</p>
                     <p className="text-xs text-stone-500 dark:text-stone-300">Contato: {winnerTicket.phone}</p>
                     <div className="flex items-center justify-center gap-2 text-xs font-semibold pt-1">
@@ -304,6 +304,25 @@ export default function SorteadorModal({
                       <span className="px-2 py-0.5 bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 rounded-md">
                         Nº {winnerTicket.number}
                       </span>
+                    </div>
+                    
+                    <div className="pt-2">
+                      <a
+                        id="btn-whatsapp-winner"
+                        href={`https://api.whatsapp.com/send?phone=55${(winnerTicket.phone || '').replace(/\D/g, '')}&text=${encodeURIComponent(
+                          `🎉 *Parabéns, ${winnerTicket.name}!* 🎉\n\n` +
+                          `Você foi o(a) grande ganhador(a) do sorteio do *${settings.title || 'Chá Rifa'}*!\n\n` +
+                          `🎫 *Bilhete Sorteado: Nº ${String(winnerTicket.number).padStart(2, '0')}*\n` +
+                          `🎁 *Presente Escolhido:* ${winnerTicket.option === 'diaper' ? `Fralda ${winnerTicket.diaperSize || 'M'}` : `Contribuição via Pix`}\n\n` +
+                          `Entre em contato conosco para combinar a entrega do prêmio! Muito obrigado por participar do nosso evento especial! ❤️`
+                        )}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-xs py-2 px-4 rounded-xl shadow-md transition-all duration-200 mt-2 w-full cursor-pointer border border-emerald-600 hover:scale-[1.02] active:scale-[0.98]"
+                      >
+                        <MessageSquare size={14} />
+                        <span>Notificar Ganhador (WhatsApp)</span>
+                      </a>
                     </div>
                   </div>
                 ) : (
