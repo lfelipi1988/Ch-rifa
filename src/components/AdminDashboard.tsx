@@ -968,10 +968,10 @@ export default function AdminDashboard({
                           {/* Phone / Whatsapp link */}
                           <td className="p-4 font-mono text-stone-500">
                             <div className="flex items-center gap-2">
-                              <span>{ticket.phone}</span>
+                              <span>{ticket.phone || '-'}</span>
                               <a
-                                href={`https://api.whatsapp.com/send?phone=55${ticket.phone.replace(/\D/g, '')}&text=${encodeURIComponent(
-                                  `Olá *${ticket.name.trim().split(' ')[0]}*!\nEstou passando para te lembrar sobre a reserva do número *${String(ticket.number).padStart(2, '0')}* do *${settings.title}*. A entrega do presente deverá ser realizada até o dia *${settings.paymentDeadline || 'XX/XX/XX'}*.\nSegue o presente escolhido: *${ticket.option === 'diaper' ? `Fralda ${ticket.diaperSize || 'M'}` : `Pix R$ ${settings.ticketPrice.toFixed(2)}`}*.\nConto com sua participação!`
+                                href={`https://api.whatsapp.com/send?phone=55${(ticket.phone || '').replace(/\D/g, '')}&text=${encodeURIComponent(
+                                  `Olá *${(ticket.name || '').trim().split(' ')[0]}*!\nEstou passando para te lembrar sobre a reserva do número *${String(ticket.number).padStart(2, '0')}* do *${settings.title}*. A entrega do presente deverá ser realizada até o dia *${settings.paymentDeadline || 'XX/XX/XX'}*.\nSegue o presente escolhido: *${ticket.option === 'diaper' ? `Fralda ${ticket.diaperSize || 'M'}` : `Pix R$ ${settings.ticketPrice.toFixed(2)}`}*.\nConto com sua participação!`
                                 )}`}
                                 target="_blank"
                                 rel="noreferrer"
