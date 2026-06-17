@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { THEME_CONFIGS, ThemeConfig } from './themeHelper.js';
 import { RaffleSettings, Ticket, ThemeType } from './types.js';
 import GuestDashboard from './components/GuestDashboard.tsx';
@@ -440,6 +441,7 @@ export default function App() {
         </div>
       )}
 
+      <Analytics />
     </div>
   );
 }
