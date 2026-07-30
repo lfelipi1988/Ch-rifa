@@ -7,7 +7,7 @@ import {
   Settings2, Users, Receipt, Calendar, ShieldCheck, Share2, 
   Check, Trash2, Edit, Save, Plus, AlertCircle, Sparkles, 
   Coins, Gift, HelpCircle, Laptop, RotateCcw, Copy, Ticket as TicketIcon, Search, Eye, Upload,
-  Database, RefreshCw, Download
+  Database, RefreshCw, Download, Filter
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -36,6 +36,8 @@ export default function AdminDashboard({
   // Tabs: 'settings' or 'participants' or 'pendings'
   const [activeTab, setActiveTab] = useState<'settings' | 'participants' | 'pendings'>('participants');
   const [searchQuery, setSearchQuery] = useState('');
+  const [giftFilter, setGiftFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   
   // Settings edit forms
   const [title, setTitle] = useState(settings.title);
@@ -483,14 +485,36 @@ export default function AdminDashboard({
 
   // Filter list
   const filteredTickets = soldTicketsList.filter(t => {
-    const q = searchQuery.toLowerCase();
-    return (
+    // 1. Search Query
+    const q = searchQuery.toLowerCase().trim();
+    const matchesSearch = !q || (
       t.name.toLowerCase().includes(q) ||
       t.number.toString().includes(q) ||
       t.phone.includes(q) ||
       (t.diaperSize && t.diaperSize.toLowerCase().includes(q)) ||
       t.option.toLowerCase().includes(q)
     );
+
+    // 2. Gift Choice Filter
+    let matchesGift = true;
+    if (giftFilter === 'pix') {
+      matchesGift = t.option === 'pix';
+    } else if (giftFilter === 'diaper') {
+      matchesGift = t.option === 'diaper';
+    } else if (giftFilter.startsWith('diaper_')) {
+      const targetSize = giftFilter.replace('diaper_', '');
+      matchesGift = t.option === 'diaper' && t.diaperSize === targetSize;
+    }
+
+    // 3. Status Filter
+    let matchesStatus = true;
+    if (statusFilter === 'paid') {
+      matchesStatus = t.status === 'paid';
+    } else if (statusFilter === 'reserved') {
+      matchesStatus = t.status === 'reserved';
+    }
+
+    return matchesSearch && matchesGift && matchesStatus;
   });
 
   return (
@@ -644,19 +668,81 @@ export default function AdminDashboard({
           <div className="lg:col-span-8 space-y-4">
             
             {/* Filter Search Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 bg-white dark:bg-stone-900 border border-stone-150 dark:border-stone-800 rounded-2xl shadow-sm">
-              <div className="relative w-full max-w-xs">
-                <Search className="absolute left-3 top-2.5 text-stone-400" size={14} />
-                <input
-                  id="admin-search-input"
-                  type="text"
-                  placeholder="Pesquisar participante..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 bg-stone-50 dark:bg-stone-950 border border-stone-200 dark:border-stone-800 text-xs rounded-xl focus:ring-1 focus:ring-yellow-500 text-stone-900 dark:text-white"
-                />
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-4 bg-white dark:bg-stone-900 border border-stone-150 dark:border-stone-800 rounded-2xl shadow-sm">
+              <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
+                {/* Search input */}
+                <div className="relative flex-1 sm:flex-none min-w-[180px]">
+                  <Search className="absolute left-3 top-2.5 text-stone-400" size={14} />
+                  <input
+                    id="admin-search-input"
+                    type="text"
+                    placeholder="Pesquisar por nome, tel, nº..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-3 py-1.5 bg-stone-50 dark:bg-stone-950 border border-stone-200 dark:border-stone-800 text-xs rounded-xl focus:ring-1 focus:ring-yellow-500 text-stone-900 dark:text-white"
+                  />
+                </div>
+
+                {/* Filter Gift Choice */}
+                <div className="relative">
+                  <select
+                    id="filter-gift-select"
+                    value={giftFilter}
+                    onChange={(e) => setGiftFilter(e.target.value)}
+                    className="py-1.5 px-3 bg-stone-50 dark:bg-stone-950 border border-stone-200 dark:border-stone-800 text-xs rounded-xl focus:ring-1 focus:ring-yellow-500 text-stone-800 dark:text-stone-200 cursor-pointer font-medium"
+                  >
+                    <option value="all">🎁 Presente: Todos</option>
+                    {settings.allowPix && <option value="pix">💵 Apenas Pix</option>}
+                    {settings.allowDiaper && (
+                      <>
+                        <option value="diaper">🍼 Apenas Fralda (Todas)</option>
+                        {(settings.diaperSizes && settings.diaperSizes.length > 0
+                          ? settings.diaperSizes
+                          : (['RN', 'P', 'M', 'G', 'GG', 'XG'] as DiaperSize[])
+                        ).map((size) => (
+                          <option key={size} value={`diaper_${size}`}>
+                            🍼 Fralda {size}
+                          </option>
+                        ))}
+                      </>
+                    )}
+                  </select>
+                </div>
+
+                {/* Filter Status */}
+                <div className="relative">
+                  <select
+                    id="filter-status-select"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="py-1.5 px-3 bg-stone-50 dark:bg-stone-950 border border-stone-200 dark:border-stone-800 text-xs rounded-xl focus:ring-1 focus:ring-yellow-500 text-stone-800 dark:text-stone-200 cursor-pointer font-medium"
+                  >
+                    <option value="all">📌 Status: Todos</option>
+                    <option value="paid">✅ Confirmado / Pago</option>
+                    <option value="reserved">⏳ Reservado / Pendente</option>
+                  </select>
+                </div>
+
+                {/* Reset filters button */}
+                {(searchQuery || giftFilter !== 'all' || statusFilter !== 'all') && (
+                  <button
+                    id="btn-clear-filters"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setGiftFilter('all');
+                      setStatusFilter('all');
+                    }}
+                    type="button"
+                    title="Limpar filtros"
+                    className="p-1.5 px-2.5 bg-stone-200 dark:bg-stone-800 hover:bg-stone-300 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-300 text-xs rounded-xl font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                  >
+                    <RotateCcw size={12} />
+                    <span>Limpar</span>
+                  </button>
+                )}
               </div>
-              <div className="flex items-center gap-3 self-end sm:self-auto">
+
+              <div className="flex items-center gap-3 self-end lg:self-auto shrink-0">
                 <button
                   id="btn-export-csv"
                   onClick={handleExportCSV}
@@ -666,8 +752,8 @@ export default function AdminDashboard({
                   <Download size={13} />
                   <span>Exportar CSV</span>
                 </button>
-                <p className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider">
-                  Mostrando {filteredTickets.length} de {soldTicketsList.length} compras
+                <p className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider whitespace-nowrap">
+                  Mostrando {filteredTickets.length} de {soldTicketsList.length}
                 </p>
               </div>
             </div>
@@ -690,7 +776,9 @@ export default function AdminDashboard({
                     {filteredTickets.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="p-8 text-center text-xs text-stone-400 italic">
-                          {searchQuery ? "Nenhum participante coincide com sua pesquisa." : "Nenhum número foi escolhido ainda."}
+                          {searchQuery || giftFilter !== 'all' || statusFilter !== 'all'
+                            ? "Nenhum participante coincide com os filtros selecionados."
+                            : "Nenhum número foi escolhido ainda."}
                         </td>
                       </tr>
                     ) : (
