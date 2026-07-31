@@ -147,6 +147,23 @@ export default function AdminDashboard({
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
+  // Date formatter helper
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return '-';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      return `${day}/${month}/${year} às ${hours}:${minutes}`;
+    } catch {
+      return dateStr;
+    }
+  };
+
   // Export reserved or paid tickets to CSV
   const handleExportCSV = () => {
     const listToExport = Object.values(tickets)
@@ -159,7 +176,7 @@ export default function AdminDashboard({
     }
 
     // CSV Headers
-    const headers = ["Número Reservado", "Nome", "Telefone", "Presente Escolhido", "Status"];
+    const headers = ["Número Reservado", "Nome", "Telefone", "Presente Escolhido", "Data da Reserva", "Status"];
     
     // Rows
     const rows = listToExport.map(t => {
@@ -174,6 +191,7 @@ export default function AdminDashboard({
         presentStr = `Pix (R$ ${settings.ticketPrice.toFixed(2)})`;
       }
       
+      const resDateStr = formatDate(t.createdAt);
       const statusStr = t.status === 'paid' ? "Confirmado" : "Reservado";
       
       const escape = (str: string) => `"${str.replace(/"/g, '""')}"`;
@@ -183,6 +201,7 @@ export default function AdminDashboard({
         escape(nameStr),
         escape(phoneStr),
         escape(presentStr),
+        escape(resDateStr),
         escape(statusStr)
       ].join(";");
     });
@@ -768,6 +787,7 @@ export default function AdminDashboard({
                       <th className="p-4">Nome completo</th>
                       <th className="p-4">Telefone</th>
                       <th className="p-4 text-center">Escolha</th>
+                      <th className="p-4">Data da Reserva</th>
                       <th className="p-4">Status</th>
                       <th className="p-4 text-emerald-600 text-right">Ação</th>
                     </tr>
@@ -775,7 +795,7 @@ export default function AdminDashboard({
                   <tbody className="divide-y divide-stone-150 dark:divide-stone-800">
                     {filteredTickets.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="p-8 text-center text-xs text-stone-400 italic">
+                        <td colSpan={7} className="p-8 text-center text-xs text-stone-400 italic">
                           {searchQuery || giftFilter !== 'all' || statusFilter !== 'all'
                             ? "Nenhum participante coincide com os filtros selecionados."
                             : "Nenhum número foi escolhido ainda."}
@@ -805,6 +825,13 @@ export default function AdminDashboard({
                                 <Coins size={10} /> Pix R$ {settings.ticketPrice.toFixed(2)}
                               </span>
                             )}
+                          </td>
+                          {/* Reservation Date */}
+                          <td className="p-4 font-mono text-[11px] text-stone-500 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5 text-stone-600 dark:text-stone-400">
+                              <Calendar size={13} className="text-amber-500 shrink-0" />
+                              <span>{formatDate(ticket.createdAt)}</span>
+                            </div>
                           </td>
                           {/* Status */}
                           <td className="p-4">
@@ -1022,13 +1049,14 @@ export default function AdminDashboard({
                     <th className="p-4">Nome Completo</th>
                     <th className="p-4">Telefone / Cobrança</th>
                     <th className="p-4 text-center">Tipo de Doação</th>
+                    <th className="p-4">Data da Reserva</th>
                     <th className="p-4 text-right">Ação de Aprovação</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-150 dark:divide-stone-800">
                   {soldTicketsList.filter(t => t.status === 'reserved').length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="p-12 text-center text-xs text-stone-400 italic">
+                      <td colSpan={6} className="p-12 text-center text-xs text-stone-400 italic">
                         <div className="flex flex-col items-center justify-center space-y-2 py-4">
                           <span className="text-4xl">✨</span>
                           <span className="font-semibold text-stone-600 dark:text-stone-350 text-xs">
@@ -1080,6 +1108,13 @@ export default function AdminDashboard({
                                 <Coins size={10} /> Pix R$ {settings.ticketPrice.toFixed(2)}
                               </span>
                             )}
+                          </td>
+                          {/* Reservation Date */}
+                          <td className="p-4 font-mono text-[11px] text-stone-500 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5 text-stone-600 dark:text-stone-400">
+                              <Calendar size={13} className="text-amber-500 shrink-0" />
+                              <span>{formatDate(ticket.createdAt)}</span>
+                            </div>
                           </td>
                           {/* Actions */}
                           <td className="p-4 text-right space-x-2 whitespace-nowrap">
