@@ -6,8 +6,8 @@ import {
 import { 
   Settings2, Users, Receipt, Calendar, ShieldCheck, Share2, 
   Check, Trash2, Edit, Save, Plus, AlertCircle, Sparkles, 
-  Coins, Gift, HelpCircle, Laptop, RotateCcw, Copy, Ticket as TicketIcon, Search, Eye, Upload,
-  Database, RefreshCw, Download, Filter, MessageSquare
+  Coins, Gift, HelpCircle, Laptop, RotateCcw, Copy, Ticket as TicketIcon, Search, Eye, EyeOff, Upload,
+  Database, RefreshCw, Download, Filter, MessageSquare, ChevronDown, ChevronUp, BarChart2, TrendingUp
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -56,6 +56,48 @@ export default function AdminDashboard({
   const [diaperObservation, setDiaperObservation] = useState(settings.diaperObservation || "");
   const [drawVideoUrl, setDrawVideoUrl] = useState(settings.drawVideoUrl || "");
   const [newPrizeInput, setNewPrizeInput] = useState('');
+
+  // Local state to hide collected total amount in manager dashboard
+  const [hideCollectedAmount, setHideCollectedAmount] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('admin_hide_collected_amount') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleHideCollectedAmount = () => {
+    setHideCollectedAmount(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('admin_hide_collected_amount', String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+
+  // Local state to minimize/hide the entire collection metrics dashboard section
+  const [isMetricsMinimized, setIsMetricsMinimized] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('admin_metrics_minimized') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleMetricsMinimized = () => {
+    setIsMetricsMinimized(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('admin_metrics_minimized', String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
 
   const insertFormat = (tagOpen: string, tagClose: string) => {
     const textarea = document.getElementById('settings-how-it-works-input') as HTMLTextAreaElement;
@@ -630,53 +672,118 @@ export default function AdminDashboard({
         </div>
       )}
 
-      {/* METRICS ROW */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-850 p-4 rounded-3xl shadow-sm text-center">
-          <div className="mx-auto w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-950/40 text-blue-600 flex items-center justify-center mb-2">
-            <TicketIcon size={16} />
+      {/* METRICS ROW SECTION WITH MINIMIZE / EXPAND TOGGLE */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-2">
+            <BarChart2 size={15} className="text-amber-500" />
+            <span className="text-xs font-bold text-stone-600 dark:text-stone-300 uppercase tracking-wide">
+              Painel de Desempenho & Arrecadação
+            </span>
           </div>
-          <span className="text-[10px] text-stone-400 dark:text-stone-500 uppercase font-bold tracking-wide">Status Geral</span>
-          <p className="text-xl font-bold dark:text-white mt-1">{paidCount + reservedCount} / {totalTickets}</p>
-          <span className="text-[10px] text-stone-400">({availableCount} restantes)</span>
+
+          <button
+            id="btn-toggle-minimize-metrics"
+            type="button"
+            onClick={toggleMetricsMinimized}
+            className="flex items-center gap-1.5 text-xs font-semibold text-stone-600 dark:text-stone-300 hover:text-amber-600 dark:hover:text-amber-400 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 py-1.5 px-3 rounded-2xl shadow-xs transition-all cursor-pointer hover:border-amber-500/40"
+            title={isMetricsMinimized ? "Expandir o painel de métricas de arrecadação" : "Ocultar / minimizar o painel de métricas"}
+          >
+            {isMetricsMinimized ? (
+              <>
+                <ChevronDown size={14} className="text-amber-500" />
+                <span>Mostrar Dashboard</span>
+              </>
+            ) : (
+              <>
+                <ChevronUp size={14} className="text-amber-500" />
+                <span>Ocultar Dashboard</span>
+              </>
+            )}
+          </button>
         </div>
 
-        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-850 p-4 rounded-3xl shadow-sm text-center">
-          <div className="mx-auto w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center mb-2">
-            <Coins size={16} />
-          </div>
-          <span className="text-[10px] text-stone-400 dark:text-stone-500 uppercase font-bold tracking-wide">Arrecadado via Pix</span>
-          <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">R$ {totalCollectedPixPrimos.toFixed(2)}</p>
-          <span className="text-[10px] text-stone-400">({soldTicketsList.filter(t => t.status==='paid' && t.option==='pix').length} bilhetes pagos)</span>
-        </div>
-
-        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-850 p-4 rounded-3xl shadow-sm text-center">
-          <div className="mx-auto w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-950/40 text-orange-600 flex items-center justify-center mb-2">
-            <Gift size={16} />
-          </div>
-          <span className="text-[10px] text-stone-400 dark:text-stone-500 uppercase font-bold tracking-wide">Fraldas Confirmadas</span>
-          <div className="flex items-center justify-center gap-1.5 mt-1">
-            <p className="text-lg font-bold dark:text-white">{soldTicketsList.filter(t => t.status==='paid' && t.option==='diaper').length}</p>
-            <span className="text-xs text-stone-400">Fraldas</span>
-          </div>
-          {/* mini size breakout */}
-          <div className="flex justify-center gap-1.5 mt-1 text-[9px] text-stone-500">
-            {Object.entries(diaperTally).map(([sz, qty]) => (
-              <span key={sz} className="bg-stone-100 dark:bg-stone-800 px-1 py-0.5 rounded">
-                {sz}:{qty}
+        {/* Minimized compact summary bar */}
+        {isMetricsMinimized ? (
+          <div className="p-3.5 bg-stone-100/70 dark:bg-stone-900/60 border border-stone-200/80 dark:border-stone-800 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs text-stone-500 dark:text-stone-400">
+            <div className="flex items-center gap-2">
+              <span className="text-stone-400">📊 Dashboard minimizado:</span>
+              <span className="font-semibold text-stone-700 dark:text-stone-200">
+                {paidCount + reservedCount} / {totalTickets} números
               </span>
-            ))}
+              <span className="text-stone-300 dark:text-stone-700">•</span>
+              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                {hideCollectedAmount ? "Pix: R$ ••••••" : `Pix: R$ ${totalCollectedPixPrimos.toFixed(2)}`}
+              </span>
+            </div>
+            <button
+              onClick={toggleMetricsMinimized}
+              className="text-[11px] text-amber-600 dark:text-amber-400 font-bold hover:underline cursor-pointer"
+            >
+              Expandir métricas completos →
+            </button>
           </div>
-        </div>
+        ) : (
+          /* Full metric cards grid */
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-850 p-4 rounded-3xl shadow-sm text-center">
+              <div className="mx-auto w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-950/40 text-blue-600 flex items-center justify-center mb-2">
+                <TicketIcon size={16} />
+              </div>
+              <span className="text-[10px] text-stone-400 dark:text-stone-500 uppercase font-bold tracking-wide">Status Geral</span>
+              <p className="text-xl font-bold dark:text-white mt-1">{paidCount + reservedCount} / {totalTickets}</p>
+              <span className="text-[10px] text-stone-400">({availableCount} restantes)</span>
+            </div>
 
-        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-850 p-4 rounded-3xl shadow-sm text-center">
-          <div className="mx-auto w-8 h-8 rounded-full bg-yellow-100 dark:bg-yellow-950/40 text-yellow-600 flex items-center justify-center mb-2">
-            <RotateCcw size={16} />
+            <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-850 p-4 rounded-3xl shadow-sm text-center relative group">
+              <button
+                id="btn-toggle-hide-collected-amount"
+                type="button"
+                onClick={toggleHideCollectedAmount}
+                title={hideCollectedAmount ? "Mostrar valor arrecadado" : "Ocultar valor arrecadado"}
+                className="absolute top-2.5 right-2.5 p-1.5 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 bg-stone-100/80 dark:bg-stone-800/80 rounded-xl transition-all cursor-pointer border border-stone-200/60 dark:border-stone-700/60"
+              >
+                {hideCollectedAmount ? <EyeOff size={13} className="text-amber-500" /> : <Eye size={13} />}
+              </button>
+              <div className="mx-auto w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center mb-2">
+                <Coins size={16} />
+              </div>
+              <span className="text-[10px] text-stone-400 dark:text-stone-500 uppercase font-bold tracking-wide">Arrecadado via Pix</span>
+              <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
+                {hideCollectedAmount ? "R$ ••••••" : `R$ ${totalCollectedPixPrimos.toFixed(2)}`}
+              </p>
+              <span className="text-[10px] text-stone-400">({soldTicketsList.filter(t => t.status==='paid' && t.option==='pix').length} bilhetes pagos)</span>
+            </div>
+
+            <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-850 p-4 rounded-3xl shadow-sm text-center">
+              <div className="mx-auto w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-950/40 text-orange-600 flex items-center justify-center mb-2">
+                <Gift size={16} />
+              </div>
+              <span className="text-[10px] text-stone-400 dark:text-stone-500 uppercase font-bold tracking-wide">Fraldas Confirmadas</span>
+              <div className="flex items-center justify-center gap-1.5 mt-1">
+                <p className="text-lg font-bold dark:text-white">{soldTicketsList.filter(t => t.status==='paid' && t.option==='diaper').length}</p>
+                <span className="text-xs text-stone-400">Fraldas</span>
+              </div>
+              {/* mini size breakout */}
+              <div className="flex justify-center gap-1.5 mt-1 text-[9px] text-stone-500">
+                {Object.entries(diaperTally).map(([sz, qty]) => (
+                  <span key={sz} className="bg-stone-100 dark:bg-stone-800 px-1 py-0.5 rounded">
+                    {sz}:{qty}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-850 p-4 rounded-3xl shadow-sm text-center">
+              <div className="mx-auto w-8 h-8 rounded-full bg-yellow-100 dark:bg-yellow-950/40 text-yellow-600 flex items-center justify-center mb-2">
+                <RotateCcw size={16} />
+              </div>
+              <span className="text-[10px] text-stone-400 dark:text-stone-500 uppercase font-bold tracking-wide">Reservorios Pendentes</span>
+              <p className="text-xl font-bold text-yellow-500 mt-1">{reservedCount}</p>
+              <span className="text-[10px] text-stone-400">Aguardando aprovação/Pix</span>
+            </div>
           </div>
-          <span className="text-[10px] text-stone-400 dark:text-stone-500 uppercase font-bold tracking-wide">Reservorios Pendentes</span>
-          <p className="text-xl font-bold text-yellow-500 mt-1">{reservedCount}</p>
-          <span className="text-[10px] text-stone-400">Aguardando aprovação/Pix</span>
-        </div>
+        )}
       </div>
 
       {/* TABS ROW */}
@@ -1464,6 +1571,44 @@ export default function AdminDashboard({
               {/* Allowed options */}
               <div className="p-4 bg-stone-50 dark:bg-stone-950 border border-stone-200/50 dark:border-stone-800 rounded-3xl space-y-4">
                 <span className="block text-[10px] font-bold text-stone-450 uppercase tracking-wide">Regras de Negócio e Opções:</span>
+                
+                {/* Toggle option to hide collected amount */}
+                <div className="flex items-center justify-between pb-3 border-b border-stone-100 dark:border-stone-850">
+                  <div>
+                    <span className="text-xs font-semibold text-stone-700 dark:text-stone-300 block">
+                      Ocultar valor arrecadado no painel:
+                    </span>
+                    <span className="text-[10px] text-stone-400 block">
+                      Oculta os valores arrecadados em R$ no painel do gestor para privacidade visual.
+                    </span>
+                  </div>
+                  <input
+                    id="opt-hide-collected-amount-settings"
+                    type="checkbox"
+                    checked={hideCollectedAmount}
+                    onChange={toggleHideCollectedAmount}
+                    className="w-4 h-4 accent-amber-500 cursor-pointer shrink-0"
+                  />
+                </div>
+
+                {/* Toggle option to minimize dashboard */}
+                <div className="flex items-center justify-between pb-3 border-b border-stone-100 dark:border-stone-850">
+                  <div>
+                    <span className="text-xs font-semibold text-stone-700 dark:text-stone-300 block">
+                      Minimizar dashboard de métricas/arrecadação:
+                    </span>
+                    <span className="text-[10px] text-stone-400 block">
+                      Oculta e minimiza os cartões superiores do painel do gestor para uma visualização mais enxuta.
+                    </span>
+                  </div>
+                  <input
+                    id="opt-minimize-metrics-settings"
+                    type="checkbox"
+                    checked={isMetricsMinimized}
+                    onChange={toggleMetricsMinimized}
+                    className="w-4 h-4 accent-amber-500 cursor-pointer shrink-0"
+                  />
+                </div>
                 
                 <div className="border-b border-stone-100 dark:border-stone-850 pb-3 space-y-2">
                   <div className="flex items-center justify-between">
