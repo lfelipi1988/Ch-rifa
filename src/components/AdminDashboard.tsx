@@ -239,6 +239,42 @@ export default function AdminDashboard({
     window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank');
   };
 
+  // Send personalized result message to an individual participant
+  const handleShareIndividualResultWhatsApp = (ticket: Ticket) => {
+    const siteUrl = window.location.origin;
+    const cleanPhone = (ticket.phone || '').replace(/\D/g, '');
+    const prizesList = settings.prizes && settings.prizes.length > 0
+      ? settings.prizes
+      : (settings.prize ? settings.prize.split('|').map(p => p.trim()).filter(Boolean) : []);
+
+    let message = `Olá, *${(ticket.name || '').trim().split(' ')[0]}*! 👋\n\n`;
+    message += `🎉 *RESULTADO DO SORTEIO - ${settings.title || 'Chá Rifa'}* 🎉\n\n`;
+    message += `🎫 *Seu Bilhete:* Nº ${String(ticket.number).padStart(2, '0')}\n\n`;
+
+    if (drawnNumbers && drawnNumbers.length > 0) {
+      message += `🏆 *Ganhadores Sorteados:*\n`;
+      drawnNumbers.forEach((num, idx) => {
+        const holder = tickets[num];
+        const prizeName = prizesList[idx] || `Prêmio ${idx + 1}`;
+        const winnerName = holder ? holder.name : 'Número vago';
+        message += `• *${prizeName.split(':')[0] || `Prêmio ${idx + 1}`}:* Nº ${String(num).padStart(2, '0')} - ${winnerName}\n`;
+      });
+      message += `\n`;
+    } else {
+      message += `📢 *Confira as novidades e resultado no nosso site!*\n\n`;
+    }
+
+    message += `🌐 *Acesse o site:* ${siteUrl}\n`;
+    if (drawVideoUrl && drawVideoUrl.trim()) {
+      message += `🎥 *Assista ao vídeo do sorteio:* ${drawVideoUrl.trim()}\n`;
+    }
+    message += `\nAgradecemos de coração por sua participação e carinho! ❤️`;
+
+    const phoneParam = cleanPhone ? `phone=55${cleanPhone}&` : '';
+    const encoded = encodeURIComponent(message);
+    window.open(`https://api.whatsapp.com/send?${phoneParam}text=${encoded}`, '_blank');
+  };
+
   // Export reserved or paid tickets to CSV
   const handleExportCSV = () => {
     const listToExport = Object.values(tickets)
@@ -1009,6 +1045,15 @@ export default function AdminDashboard({
                           </td>
                           {/* Actions */}
                           <td className="p-4 text-right space-x-1 whitespace-nowrap">
+                            <button
+                              id={`send-individual-result-btn-${ticket.number}`}
+                              onClick={() => handleShareIndividualResultWhatsApp(ticket)}
+                              title={`Enviar mensagem do resultado do sorteio diretamente para ${ticket.name} via WhatsApp`}
+                              className="p-1 px-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[10px] font-bold cursor-pointer inline-flex items-center gap-1 shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+                            >
+                              <MessageSquare size={11} />
+                              <span>Resultado</span>
+                            </button>
                             {ticket.status === 'reserved' && (
                               <button
                                 id={`approve-paid-btn-${ticket.number}`}
