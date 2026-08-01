@@ -306,7 +306,7 @@ export default function SorteadorModal({
                       </span>
                     </div>
                     
-                    <div className="pt-2">
+                    <div className="pt-2 flex flex-col gap-2">
                       <a
                         id="btn-whatsapp-winner"
                         href={`https://api.whatsapp.com/send?phone=55${(winnerTicket.phone || '').replace(/\D/g, '')}&text=${encodeURIComponent(
@@ -314,14 +314,40 @@ export default function SorteadorModal({
                           `Você foi o(a) grande ganhador(a) do sorteio do *${settings.title || 'Chá Rifa'}*!\n\n` +
                           `🎫 *Bilhete Sorteado: Nº ${String(winnerTicket.number).padStart(2, '0')}*\n` +
                           `🎁 *Presente Escolhido:* ${winnerTicket.option === 'diaper' ? `Fralda ${winnerTicket.diaperSize || 'M'}` : `Contribuição via Pix`}\n\n` +
+                          `🌐 *Site:* ${window.location.origin}\n` +
+                          (settings.drawVideoUrl && settings.drawVideoUrl.trim() ? `🎥 *Vídeo do Sorteio:* ${settings.drawVideoUrl.trim()}\n\n` : '\n') +
                           `Entre em contato conosco para combinar a entrega do prêmio! Muito obrigado por participar do nosso evento especial! ❤️`
                         )}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-xs py-2 px-4 rounded-xl shadow-md transition-all duration-200 mt-2 w-full cursor-pointer border border-emerald-600 hover:scale-[1.02] active:scale-[0.98]"
+                        className="inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-xs py-2 px-4 rounded-xl shadow-md transition-all duration-200 w-full cursor-pointer border border-emerald-600 hover:scale-[1.02] active:scale-[0.98]"
                       >
                         <MessageSquare size={14} />
                         <span>Notificar Ganhador (WhatsApp)</span>
+                      </a>
+
+                      <a
+                        id="btn-whatsapp-all-participants"
+                        href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
+                          `🎉 *RESULTADO DO SORTEIO - ${settings.title || 'Chá Rifa'}* 🎉\n\n` +
+                          (drawnNumbers.length > 0 
+                            ? `🏆 *Ganhadores Sorteados:*\n` + drawnNumbers.map((num, i) => {
+                                const h = tickets[num];
+                                const p = prizesList[i] || `Prêmio ${i+1}`;
+                                return `• *${p.split(':')[0] || `Prêmio ${i+1}`}:* Nº ${String(num).padStart(2, '0')} - ${h ? h.name : 'Número vago'}`;
+                              }).join('\n') + `\n\n`
+                            : ''
+                          ) +
+                          `🌐 *Site da Rifa:* ${window.location.origin}\n` +
+                          (settings.drawVideoUrl && settings.drawVideoUrl.trim() ? `🎥 *Vídeo do Sorteio:* ${settings.drawVideoUrl.trim()}\n\n` : '\n') +
+                          `Muito obrigado a todos os participantes! ❤️`
+                        )}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center justify-center gap-2 bg-stone-800 hover:bg-stone-700 active:bg-stone-900 text-amber-400 font-extrabold text-xs py-2 px-4 rounded-xl shadow-md transition-all duration-200 w-full cursor-pointer border border-amber-500/30 hover:scale-[1.02] active:scale-[0.98]"
+                      >
+                        <MessageSquare size={14} className="text-emerald-400" />
+                        <span>Compartilhar Resultado Geral (WhatsApp)</span>
                       </a>
                     </div>
                   </div>

@@ -173,7 +173,8 @@ function getInitialState(): DatabaseState {
         { from: 81, to: 100, size: "GG" }
       ],
       howItWorks: "",
-      diaperObservation: "Marcas sugeridas: Pampers, Huggies, MamyPoko ou Babysec."
+      diaperObservation: "Marcas sugeridas: Pampers, Huggies, MamyPoko ou Babysec.",
+      drawVideoUrl: ""
     },
     tickets: {},
     drawnNumbers: []
@@ -229,6 +230,10 @@ async function migrateAndSaveState(db: DatabaseState): Promise<DatabaseState> {
   if (db.settings.paymentDeadline === undefined) {
     const defaultDeadline = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0].split('-').reverse().join('/');
     db.settings.paymentDeadline = defaultDeadline;
+    dirty = true;
+  }
+  if (db.settings.drawVideoUrl === undefined) {
+    db.settings.drawVideoUrl = "";
     dirty = true;
   }
   if (db.settings.diaperSizes) {
@@ -614,7 +619,8 @@ initDbPromise = initDatabase()
           pixCopyAndPaste: db.settings.pixCopyAndPaste || "",
           paymentDeadline: db.settings.paymentDeadline || "",
           howItWorks: db.settings.howItWorks || "",
-          diaperObservation: db.settings.diaperObservation || ""
+          diaperObservation: db.settings.diaperObservation || "",
+          drawVideoUrl: db.settings.drawVideoUrl || ""
         },
         tickets: maskedTickets,
         drawnNumbers: db.drawnNumbers || []
@@ -771,7 +777,7 @@ initDbPromise = initDatabase()
       return res.status(401).json({ error: "Não autorizado." });
     }
 
-    const { title, description, prize, prizes, pixKey, pixKeyType, pixQrCode, whatsappNumber, pixCopyAndPaste, paymentDeadline, theme, raffleDate, ticketPrice, allowDiaper, allowPix, diaperSizes, adminKey, numberOfTickets, diaperRanges, howItWorks, diaperObservation } = req.body;
+    const { title, description, prize, prizes, pixKey, pixKeyType, pixQrCode, whatsappNumber, pixCopyAndPaste, paymentDeadline, theme, raffleDate, ticketPrice, allowDiaper, allowPix, diaperSizes, adminKey, numberOfTickets, diaperRanges, howItWorks, diaperObservation, drawVideoUrl } = req.body;
 
     if (title) db.settings.title = title;
     if (description !== undefined) db.settings.description = description;
@@ -793,6 +799,7 @@ initDbPromise = initDatabase()
     if (diaperRanges !== undefined) db.settings.diaperRanges = diaperRanges;
     if (howItWorks !== undefined) db.settings.howItWorks = howItWorks;
     if (diaperObservation !== undefined) db.settings.diaperObservation = diaperObservation;
+    if (drawVideoUrl !== undefined) db.settings.drawVideoUrl = drawVideoUrl;
     
     if (numberOfTickets !== undefined) {
       const oldNum = db.settings.numberOfTickets;

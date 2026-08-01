@@ -7,7 +7,7 @@ import {
   Settings2, Users, Receipt, Calendar, ShieldCheck, Share2, 
   Check, Trash2, Edit, Save, Plus, AlertCircle, Sparkles, 
   Coins, Gift, HelpCircle, Laptop, RotateCcw, Copy, Ticket as TicketIcon, Search, Eye, Upload,
-  Database, RefreshCw, Download, Filter
+  Database, RefreshCw, Download, Filter, MessageSquare
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -54,6 +54,7 @@ export default function AdminDashboard({
   const [paymentDeadline, setPaymentDeadline] = useState(settings.paymentDeadline || "");
   const [howItWorks, setHowItWorks] = useState(settings.howItWorks || "");
   const [diaperObservation, setDiaperObservation] = useState(settings.diaperObservation || "");
+  const [drawVideoUrl, setDrawVideoUrl] = useState(settings.drawVideoUrl || "");
   const [newPrizeInput, setNewPrizeInput] = useState('');
 
   const insertFormat = (tagOpen: string, tagClose: string) => {
@@ -162,6 +163,38 @@ export default function AdminDashboard({
     } catch {
       return dateStr;
     }
+  };
+
+  // Helper to construct WhatsApp message and share raffle result with participants
+  const handleShareResultsWhatsApp = () => {
+    const siteUrl = window.location.origin;
+    const prizesList = settings.prizes && settings.prizes.length > 0
+      ? settings.prizes
+      : (settings.prize ? settings.prize.split('|').map(p => p.trim()).filter(Boolean) : []);
+
+    let message = `🎉 *RESULTADO DO SORTEIO - ${settings.title || 'Chá Rifa'}* 🎉\n\n`;
+
+    if (drawnNumbers && drawnNumbers.length > 0) {
+      message += `🏆 *Ganhadores Sorteados:*\n`;
+      drawnNumbers.forEach((num, idx) => {
+        const holder = tickets[num];
+        const prizeName = prizesList[idx] || `Prêmio ${idx + 1}`;
+        const winnerName = holder ? holder.name : 'Número vago';
+        message += `• *${prizeName.split(':')[0] || `Prêmio ${idx + 1}`}:* Nº ${String(num).padStart(2, '0')} - ${winnerName}\n`;
+      });
+      message += `\n`;
+    } else {
+      message += `📢 *Confira as novidades do nosso ${settings.title || 'Chá Rifa'}!*\n\n`;
+    }
+
+    message += `🌐 *Acesse o site da Rifa:* ${siteUrl}\n`;
+    if (drawVideoUrl && drawVideoUrl.trim()) {
+      message += `🎥 *Assista ao vídeo do sorteio:* ${drawVideoUrl.trim()}\n`;
+    }
+    message += `\nAgradecemos imensamente a participação de todos os participantes! ❤️`;
+
+    const encoded = encodeURIComponent(message);
+    window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank');
   };
 
   // Export reserved or paid tickets to CSV
@@ -370,7 +403,8 @@ export default function AdminDashboard({
           numberOfTickets: numTickets,
           diaperRanges,
           howItWorks,
-          diaperObservation
+          diaperObservation,
+          drawVideoUrl
         })
       });
 
@@ -553,6 +587,16 @@ export default function AdminDashboard({
 
         {/* Action controls */}
         <div className="flex flex-wrap gap-2 mt-4 md:mt-0">
+          <button
+            id="share-results-whatsapp-header-btn"
+            onClick={handleShareResultsWhatsApp}
+            className="flex items-center gap-1.5 p-2 px-3.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-2xl shadow-md transition-all cursor-pointer border border-emerald-500 hover:scale-[1.02] active:scale-[0.98]"
+            title="Compartilhar resultado do sorteio com os participantes via WhatsApp"
+          >
+            <MessageSquare size={14} />
+            <span>Compartilhar Resultado (WhatsApp)</span>
+          </button>
+
           <button
             id="open-sorteador-modal-btn"
             onClick={onOpenSorteador}
@@ -761,12 +805,23 @@ export default function AdminDashboard({
                 )}
               </div>
 
-              <div className="flex items-center gap-3 self-end lg:self-auto shrink-0">
+              <div className="flex flex-wrap items-center gap-2 self-end lg:self-auto shrink-0">
+                <button
+                  id="share-results-whatsapp-participants-btn"
+                  onClick={handleShareResultsWhatsApp}
+                  type="button"
+                  className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-1.5 px-3 rounded-xl cursor-pointer shadow-sm border border-emerald-600 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  title="Enviar resultado do sorteio com o link do vídeo para o WhatsApp"
+                >
+                  <MessageSquare size={13} />
+                  <span>Resultado no WhatsApp</span>
+                </button>
+
                 <button
                   id="btn-export-csv"
                   onClick={handleExportCSV}
                   type="button"
-                  className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-1.5 px-3 rounded-xl cursor-pointer shadow-sm border border-emerald-600 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  className="flex items-center gap-1.5 bg-stone-700 hover:bg-stone-600 text-white font-bold text-xs py-1.5 px-3 rounded-xl cursor-pointer shadow-sm border border-stone-600 transition-all hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <Download size={13} />
                   <span>Exportar CSV</span>
@@ -1386,6 +1441,24 @@ export default function AdminDashboard({
                   className="w-full px-3 py-2 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 text-xs rounded-xl focus:ring-1 focus:ring-yellow-500 text-stone-800 dark:text-white font-bold"
                 />
                 <p className="text-[10px] text-stone-400 leading-tight">Data/prazo máximo para que o convidado envie o Pix ou entregue a fralda encomendada.</p>
+              </div>
+
+              {/* Draw Video URL field */}
+              <div className="p-4 bg-stone-50 dark:bg-stone-950 border border-stone-200/50 dark:border-stone-800 rounded-3xl space-y-2">
+                <label className="block text-xs font-bold text-stone-700 dark:text-stone-300 flex items-center gap-1.5">
+                  🎥 Link do Vídeo do Sorteio:
+                </label>
+                <input
+                  id="settings-video-url-input"
+                  type="url"
+                  placeholder="Ex: https://youtube.com/watch?v=... ou Instagram / TikTok / Drive"
+                  value={drawVideoUrl}
+                  onChange={(e) => setDrawVideoUrl(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 text-xs rounded-xl focus:ring-1 focus:ring-yellow-500 text-stone-800 dark:text-white font-medium"
+                />
+                <p className="text-[10px] text-stone-400 leading-tight">
+                  Insira o link do vídeo gravado do sorteio. Este link será incluído automaticamente na mensagem formatada do WhatsApp enviada aos participantes e exibido no site.
+                </p>
               </div>
 
               {/* Allowed options */}

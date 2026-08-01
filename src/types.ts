@@ -46,6 +46,7 @@ export interface RaffleSettings {
   diaperRanges?: DiaperRange[];
   howItWorks?: string;
   diaperObservation?: string;
+  drawVideoUrl?: string;
 }
 
 export interface DatabaseState {

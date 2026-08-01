@@ -328,6 +328,21 @@ export default function GuestDashboard({
                 });
               })()}
             </div>
+
+            {settings.drawVideoUrl && settings.drawVideoUrl.trim() && (
+              <div className="pt-2">
+                <a
+                  id="guest-draw-video-link"
+                  href={settings.drawVideoUrl.trim()}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-2 w-full py-2.5 px-4 bg-red-600 hover:bg-red-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-all hover:scale-[1.01] active:scale-[0.99] border border-red-500"
+                >
+                  <span className="text-sm">🎥</span>
+                  <span>Assista ao Vídeo do Sorteio Gravado</span>
+                </a>
+              </div>
+            )}
           </div>
         </div>
 
