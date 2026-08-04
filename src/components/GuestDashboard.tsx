@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ThemeConfig } from '../themeHelper.js';
 import { Ticket, RaffleSettings, DiaperSize } from '../types.js';
 import Countdown from './Countdown.tsx';
-import { ShieldCheck, Heart, Sparkles, Gift, Coins, Trophy, Calendar, Users, HelpCircle, Activity, ChevronDown } from 'lucide-react';
+import { ShieldCheck, Heart, Sparkles, Gift, Coins, Trophy, Calendar, Users, HelpCircle, Activity, ChevronDown, Lock } from 'lucide-react';
 
 interface GuestDashboardProps {
   settings: RaffleSettings;
@@ -398,6 +398,23 @@ export default function GuestDashboard({
         </div>
 
         <div className="md:col-span-8 space-y-4">
+          {/* Draw completed lock banner */}
+          {drawnNumbers && drawnNumbers.length > 0 && (
+            <div id="raffle-draw-completed-lock-banner" className="p-4 bg-amber-500/15 border-2 border-amber-500/40 rounded-3xl flex items-center gap-3 text-amber-900 dark:text-amber-200 shadow-sm animate-fadeIn">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500 text-stone-950 flex items-center justify-center shrink-0 font-bold text-lg shadow-sm">
+                <Lock size={20} />
+              </div>
+              <div>
+                <h4 className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
+                  Sorteio Realizado • Reservas Encerradas
+                </h4>
+                <p className="text-[11px] font-semibold opacity-90 leading-tight mt-0.5">
+                  O sorteio desta rifa já foi realizado. A reserva de novos números está bloqueada.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Status summary tracker */}
           <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-white/80 dark:bg-stone-900 border border-stone-155 dark:border-stone-850 rounded-2xl shadow-sm text-stone-700 dark:text-stone-300">
             <div className="flex items-center gap-4 text-xs font-semibold">
@@ -454,8 +471,9 @@ export default function GuestDashboard({
                   };
                   const ticketDiaperSize = getDiaperSizeForNumber(num);
 
+                  const isDrawCompleted = drawnNumbers && drawnNumbers.length > 0;
                   const isSelectedInCart = selectedNumbers.includes(num);
-                  const isSelectable = status === 'available';
+                  const isSelectable = status === 'available' && !isDrawCompleted;
                   const displayStatusClass = isSelectedInCart
                     ? 'scale-105 border-2 border-amber-500 bg-amber-500 text-stone-950 ring-4 ring-amber-400/30 font-black shadow-lg animate-pulse'
                     : visualStatusClass;
@@ -466,7 +484,10 @@ export default function GuestDashboard({
                       key={num}
                       disabled={!isSelectable && !isSelectedInCart}
                       onClick={() => onSelectNumber(num)}
-                      className={`relative aspect-square rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer ${displayStatusClass}`}
+                      title={isDrawCompleted ? "Sorteio já realizado! Reservas travadas." : undefined}
+                      className={`relative aspect-square rounded-xl flex flex-col items-center justify-center transition-all ${
+                        isDrawCompleted && status === 'available' ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+                      } ${displayStatusClass}`}
                     >
                       <span className="text-sm font-mono font-black tracking-tighter block leading-none">
                         {String(num).padStart(2, '0')}

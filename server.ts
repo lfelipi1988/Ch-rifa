@@ -681,6 +681,11 @@ initDbPromise = initDatabase()
 
     const db = await getRaffleState();
 
+    // Check if raffle draw has already been performed
+    if (db.drawnNumbers && db.drawnNumbers.length > 0) {
+      return res.status(422).json({ error: "O sorteio desta rifa já foi realizado! A reserva de novos números está encerrada." });
+    }
+
     // Check if numbers exceed limits and availability
     for (const n of nums) {
       if (n > db.settings.numberOfTickets) {

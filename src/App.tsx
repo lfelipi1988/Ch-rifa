@@ -200,6 +200,9 @@ export default function App() {
 
   // Grid number selection: handles multi-toggles for Guest shopping cart
   const handleSelectNumber = (num: number) => {
+    // Cannot pick numbers if draw has already taken place
+    if (drawnNumbers && drawnNumbers.length > 0) return;
+
     const existing = tickets[num];
     // Cannot pick already reserved or paid numbers from the grid
     if (existing && (existing.status === 'paid' || existing.status === 'reserved')) return;
